@@ -46,11 +46,18 @@ object AssetLoader {
             "hand_cursor_trimmed.png",
             "magnet_btn_0.png",
             "shuffle_btn_0.png",
+            "magnet_lightning_strip.png",
+            "shuffle_lightning_strip.png",
             "nav/nav_home.png",
             "nav/nav_shop.png",
             "nav/nav_settings.png",
             "profile/btn_level_green.png",
-            "crates/crate_mystery.png"
+            "crates/crate_mystery.png",
+            "cave/dispenser_0.png",
+            "cave/dispenser_1.png",
+            "cave/dispenser_2.png",
+            "cave/dispenser_3.png",
+            "cave/dispenser_4.png"
         )
         for (path in criticalAssets) {
             loadBitmap(context, path)
@@ -111,11 +118,39 @@ object AssetLoader {
             loadBitmap(context, "crates/crate_full_$key.png")
             loadBitmap(context, "rail_buckets/bucket_$key.png")
             loadBitmap(context, "balls/ball_$key.png")
+            loadBitmap(context, "cave/tray_$key.png")
             
             // Preload primary fluffy moods
             listOf("happy_open", "wink", "eyes_closed", "surprised", "curious", "content", "angry_1", "angry_2").forEach { mood ->
                 loadBitmap(context, "fluffies/fluffy_${key}_$mood.png")
             }
+        }
+
+        val storyAssets = listOf(
+            "story/hero_happy.png",
+            "story/hero_wink.png",
+            "story/hero_laugh.png",
+            "story/hero_shocked.png",
+            "story/hero_scared.png",
+            "story/hero_dash.png",
+            "story/hero_worried.png",
+            "story/villain_grin.png",
+            "story/villain_point.png",
+            "story/villain_angry.png",
+            "story/ufo_villain.png",
+            "story/ufo_beam.png",
+            "story/ufo_tilted.png",
+            "story/vortex_purple.png",
+            "story/vortex_swirl.png",
+            "story/cage_trapped.png",
+            "story/bubble_big.png",
+            "story/cloud_puff.png",
+            "story/speech_bubble.png",
+            "story/star_gold.png",
+            "story/heart_red.png"
+        )
+        for (path in storyAssets) {
+            loadBitmap(context, path)
         }
     }
 
@@ -156,5 +191,15 @@ object AssetLoader {
 
     fun getBucketSpritesheetPurple(context: Context): Bitmap? {
         return loadBitmap(context, "bucket_spritesheet_purple.png")
+    }
+
+    fun getDispenserFrame(context: Context, frameIndex: Int): Bitmap? {
+        val idx = frameIndex.coerceIn(0, 4)
+        return loadBitmap(context, "cave/dispenser_$idx.png")
+            ?: loadBitmap(context, "cave/cave_0.png")
+    }
+
+    fun getDispenserTray(context: Context, color: MarbleColor): Bitmap? {
+        return loadBitmap(context, "cave/tray_${getColorKey(color)}.png")
     }
 }

@@ -33,21 +33,23 @@ class FunnelPhysics {
 
     private fun initWalls() {
         val rawSegments = listOf(
-            floatArrayOf(18f, 120f, 18f, 400f, 1.0f, 0.0f),
-            floatArrayOf(18f, 400f, 74f, 420f, 0.336f, -0.942f),
-            floatArrayOf(74f, 420f, 132f, 436f, 0.266f, -0.964f),
-            floatArrayOf(132f, 436f, 132f, 458f, 1.0f, 0.0f),
-            floatArrayOf(164f, 458f, 164f, 436f, -1.0f, 0.0f),
-            floatArrayOf(164f, 436f, 222f, 420f, -0.266f, -0.964f),
-            floatArrayOf(222f, 420f, 278f, 400f, -0.336f, -0.942f),
-            floatArrayOf(278f, 400f, 278f, 120f, -1.0f, 0.0f)
+            floatArrayOf(18f, 120f, 18f, 400f),
+            floatArrayOf(18f, 400f, 74f, 420f),
+            floatArrayOf(74f, 420f, 130f, 436f),
+            floatArrayOf(130f, 436f, 130f, 458f),
+            floatArrayOf(166f, 458f, 166f, 436f),
+            floatArrayOf(166f, 436f, 222f, 420f),
+            floatArrayOf(222f, 420f, 278f, 400f),
+            floatArrayOf(278f, 400f, 278f, 120f)
         )
 
         for (s in rawSegments) {
             val dx = s[2] - s[0]
             val dy = s[3] - s[1]
             val len = hypot(dx, dy)
-            walls.add(FunnelBoundarySegment(s[0], s[1], s[2], s[3], s[4], s[5], len))
+            val nx = dy / len
+            val ny = -dx / len
+            walls.add(FunnelBoundarySegment(s[0], s[1], s[2], s[3], nx, ny, len))
         }
     }
 

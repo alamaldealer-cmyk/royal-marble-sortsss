@@ -91,6 +91,7 @@ object GameRules {
                     val belowR = r + 1
                     if (belowR < GameConstants.GRID_ROWS && grid[belowR][c].kind == CellKind.EMPTY) {
                         val nextColor = if (cell.queue.isNotEmpty()) cell.queue.removeAt(0) else MarbleColor.PURPLE
+                        cell.color = nextColor
                         cell.counter = (cell.counter ?: 1) - 1
                         cell.animState = "cave_dispensing"
                         cell.animTimer = 0f
@@ -99,7 +100,9 @@ object GameRules {
                             color = nextColor,
                             animState = "dispensing",
                             animTimer = 0f,
-                            offsetY = -15f
+                            scaleX = 0.65f,
+                            scaleY = 0.65f,
+                            offsetY = -28f
                         )
                         dispensed.add(DispensedCell(belowR, c, nextColor, r, c))
                     }
@@ -201,5 +204,117 @@ object GameRules {
             shuffled = didSwap || columns.any { it.bricks.isNotEmpty() },
             swappedColumns = if (swappedCols.isNotEmpty()) swappedCols else listOf(0, 1, 2, 3).take(columns.size)
         )
+    }
+
+    data class MagnetBallAssignment(
+        val beltBall: BeltBall,
+        val targetRow: Int,
+        val targetCol: Int,
+        val targetSlotIndex: Int
+    )
+
+    fun planMagnetReturn(
+        grid: Array<Array<GridCell>>,
+        beltBalls: List<BeltBall>
+    ): List<MagnetBallAssignment> {
+        if (beltBalls.isEmpty()) return emptyList()
+
+        val assignments = mutableListOf<MagnetBallAssignment>()
+
+        // Candidate slots ordered bottom-to-top, center-out so returned containers are exposed & accessible
+        val colPriority = listOf(2, 3, 1, 4, 0, 5)
+        val availableEmptySlots = ArrayDeque<Pair<Int, Int>>()
+        val fallbackWallSlots = ArrayDeque<Pair<Int, Int>>()
+        for (r in GameConstants.GRID_ROWS - 1 downTo 0) {
+            for (c in colPriority) {
+                when (grid[r][c].kind) {
+                    CellKind.EMPTY -> availableEmptySlots.addLast(Pair(r, c))
+                    CellKind.WALL -> if (r >= 1) fallbackWallSlots.addLast(Pair(r, c))
+                    else -> Unit
+                }
+            }
+        }
+
+        // Track reserved slot count on each container so multiple balls fill slots 0..8 cleanly
+        val reservedSlots = mutableMapOf<Pair<Int, Int>, Int>()
+        val ballsByColor = beltBalls.groupBy { it.color }
+
+        for ((color, colorBalls) in ballsByColor) {
+            var idx = 0
+
+            // 1. First top up any exposed partial BLOCK of the same color that has < 9 balls
+            for (r in GameConstants.GRID_ROWS - 1 downTo 0) {
+                if (idx >= colorBalls.size) break
+                for (c in colPriority) {
+                    if (idx >= colorBalls.size) break
+                    val cell = grid[r][c]
+                    if (cell.kind == CellKind.BLOCK &&
+                        cell.color == color &&
+                        !cell.isMystery &&
+                        cell.animState != "magnet_receiving" &&
+                        isExposed(grid, r, c)
+                    ) {
+                        val pos = Pair(r, c)
+                        val alreadyUsed = reservedSlots[pos] ?: cell.ballCount.coerceIn(0, GameConstants.BALLS_PER_BLOCK)
+                        var slot = alreadyUsed
+                        while (slot < GameConstants.BALLS_PER_BLOCK && idx < colorBalls.size) {
+                            cell.animState = "magnet_receiving"
+                            cell.animTimer = 0f
+                            assignments.add(
+                                MagnetBallAssignment(
+                                    beltBall = colorBalls[idx],
+                                    targetRow = r,
+                                    targetCol = c,
+                                    targetSlotIndex = slot
+                                )
+                            )
+                            slot++
+                            idx++
+                        }
+                        reservedSlots[pos] = slot
+                    }
+                }
+            }
+
+            // 2. Place remaining balls of this color into new upper container(s) (up to 9 per container)
+            while (idx < colorBalls.size) {
+                val targetPos = if (availableEmptySlots.isNotEmpty()) {
+                    availableEmptySlots.removeFirst()
+                } else if (fallbackWallSlots.isNotEmpty()) {
+                    fallbackWallSlots.removeFirst()
+                } else {
+                    break
+                }
+
+                val r = targetPos.first
+                val c = targetPos.second
+                grid[r][c] = GridCell(
+                    kind = CellKind.BLOCK,
+                    color = color,
+                    ballCount = 0,
+                    animState = "magnet_receiving",
+                    animTimer = 0f,
+                    scaleX = 0.25f,
+                    scaleY = 0.25f
+                )
+
+                var slot = 0
+                while (slot < GameConstants.BALLS_PER_BLOCK && idx < colorBalls.size) {
+                    assignments.add(
+                        MagnetBallAssignment(
+                            beltBall = colorBalls[idx],
+                            targetRow = r,
+                            targetCol = c,
+                            targetSlotIndex = slot
+                        )
+                    )
+                    slot++
+                    idx++
+                }
+                reservedSlots[targetPos] = slot
+            }
+        }
+
+        return assignments
     }
 }

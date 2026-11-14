@@ -10,16 +10,15 @@ object GameConstants {
 
     const val BALLS_PER_BLOCK = 9
     const val BELT_SPEED = 120f // px/s
-    const val BELT_CAPACITY = 30
-    const val BALL_SPACING = 447.398f / BELT_CAPACITY
+    const val BELT_CAPACITY = 24
     const val GRAVITY = 1000f // px/s^2 down
     const val NECK_WIDTH = 38f
     const val BRICK_HOLES = 3
-    const val MAX_WAITING_BALLS = 30
-    const val RESUME_WAITING_BALLS = 29
+    const val MAX_WAITING_BALLS = 24
+    const val RESUME_WAITING_BALLS = 23
 
-    const val BALL_RADIUS_FUNNEL = 7f
-    const val BALL_RADIUS_BELT = 7.0f
+    const val BALL_RADIUS_FUNNEL = 7.9f
+    const val BALL_RADIUS_BELT = 8.0f
     const val MIN_DROP_INTERVAL_MS = 60L
 
     const val GRID_COLS = 6
@@ -49,14 +48,15 @@ object GameConstants {
     const val MATCH_X_TOLERANCE = 25f
 
     // Belt Stadium Path
-    const val BELT_TOP_Y = 463.5f
-    const val BELT_BOTTOM_Y = 484.5f
+    const val BELT_TOP_Y = 462.5f
+    const val BELT_BOTTOM_Y = 485.5f
     const val BELT_LEFT_CENTER_X = 58f
     const val BELT_RIGHT_CENTER_X = 238f
-    const val BELT_CENTER_RADIUS = 10.5f
+    const val BELT_CENTER_RADIUS = 11.5f
     const val BELT_STRAIGHT_LENGTH = 180f
-    val BELT_ARC_LENGTH = (PI * BELT_CENTER_RADIUS).toFloat() // ~32.9867f
-    val BELT_TOTAL_LENGTH = 2f * BELT_STRAIGHT_LENGTH + 2f * BELT_ARC_LENGTH // ~425.973f
+    val BELT_ARC_LENGTH = (PI * BELT_CENTER_RADIUS).toFloat() // ~36.1283f
+    val BELT_TOTAL_LENGTH = 2f * BELT_STRAIGHT_LENGTH + 2f * BELT_ARC_LENGTH // ~432.2566f
+    val BALL_SPACING = BELT_TOTAL_LENGTH / BELT_CAPACITY // ~18.0107f
 
     data class ColorDef(
         val hex: Color,

@@ -1,6 +1,6 @@
 {
   "name": "Royal Marbles",
-  "description": "Hyper-casual physics marble sorting puzzle game with block grid pop, funnel physics, conveyor belt mechanics, and royal color matching.",
+  "description": "Hyper-casual physics marble sorting puzzle game with block grid pop, funnel physics, conveyor belt mechanics, royal color matching, and 10 animated Floofie rescue story chapters across 100 levels.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -591,7 +591,7 @@ fun SettingsTabContent(
                             .background(Color(0xFF2EB55A))
                             .border(1.5.dp, Color.White, CircleShape)
                             .clickable {
-                                if (levelNumber < 50) {
+                                if (levelNumber < 100) {
                                     SoundManager.playTap()
                                     onSetLevel(levelNumber + 1)
                                 }
@@ -906,7 +906,7 @@ fun ProfileModal(
                                 .background(Color(0xFF2EB55A))
                                 .border(1.dp, Color.White, CircleShape)
                                 .clickable {
-                                    if (draftLevel < 50) {
+                                    if (draftLevel < 100) {
                                         SoundManager.playTap()
                                         draftLevel++
                                     }

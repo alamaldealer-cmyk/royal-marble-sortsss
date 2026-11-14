@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RadialGradient
 import android.graphics.Rect
 import android.graphics.RectF
@@ -60,6 +61,7 @@ import com.example.game.model.CellKind
 import com.example.game.model.DroppingBall
 import com.example.game.model.FluffyVanishEffect
 import com.example.game.model.GridCell
+import com.example.game.model.MagnetReturningBall
 import com.example.game.model.MarbleColor
 import com.example.game.model.Particle
 import com.example.game.model.ParticleShape
@@ -99,6 +101,8 @@ fun GameBoardScreen(
     val handCursorBitmap = remember { AssetLoader.loadBitmap(context, "hand_cursor_trimmed.png") }
     val magnetBtnBitmap = remember { AssetLoader.loadBitmap(context, "magnet_btn_0.png") }
     val shuffleBtnBitmap = remember { AssetLoader.loadBitmap(context, "shuffle_btn_0.png") }
+    val magnetLightningStrip = remember { AssetLoader.loadBitmap(context, "magnet_lightning_strip.png") }
+    val shuffleLightningStrip = remember { AssetLoader.loadBitmap(context, "shuffle_lightning_strip.png") }
 
     // Font Paint for high performance canvas rendering
     val fredokaTypeface = remember {
@@ -139,6 +143,9 @@ fun GameBoardScreen(
         var viewOffsetX by remember { mutableFloatStateOf(0f) }
         var viewOffsetY by remember { mutableFloatStateOf(0f) }
         var viewArenaOffsetY by remember { mutableFloatStateOf(0f) }
+        val slotClipPath = remember { Path() }
+        val crateColNormX = remember { floatArrayOf(0.262f, 0.500f, 0.738f) }
+        val crateRowNormY = remember { floatArrayOf(0.276f, 0.493f, 0.710f) }
 
         // Game state models - generated cleanly per keyed board session
         val levelData = remember {
@@ -170,6 +177,11 @@ fun GameBoardScreen(
         val droppingBalls = remember { mutableStateListOf<DroppingBall>() }
         val particles = remember { mutableStateListOf<Particle>() }
         val fluffyEffects = remember { mutableStateListOf<FluffyVanishEffect>() }
+        val magnetReturningBalls = remember { mutableStateListOf<MagnetReturningBall>() }
+        var magnetPulseTimer by remember { mutableFloatStateOf(0f) }
+        var activePowerupOverlayType by remember { mutableStateOf<String?>(null) } // "magnet" or "shuffle"
+        var powerupOverlayTimer by remember { mutableFloatStateOf(0f) }
+        val powerupOverlayDuration = 0.85f
         var nextDropId by remember { mutableIntStateOf(5000) }
         var beltScrollDistance by remember { mutableFloatStateOf(0f) }
 
@@ -180,6 +192,9 @@ fun GameBoardScreen(
         funnelFullAlertTimer = 0f
         isMagnetActive = false
         isShuffling = false
+        magnetPulseTimer = 0f
+        activePowerupOverlayType = null
+        powerupOverlayTimer = 0f
         gameState = "playing"
         isPaused = false
         physics.balls.clear()
@@ -187,6 +202,7 @@ fun GameBoardScreen(
         droppingBalls.clear()
         particles.clear()
         fluffyEffects.clear()
+        magnetReturningBalls.clear()
         beltScrollDistance = 0f
     }
 
@@ -240,7 +256,7 @@ fun GameBoardScreen(
                         )
                     }
 
-                    // Keep funnel lock synced: locks at 30+ waiting balls, unlocks once <= 29 remain
+                    // Keep funnel lock synced: locks at 24+ waiting balls, unlocks once <= 23 remain
                     isFunnelLocked = GameRules.shouldBlockBlockTap(physics.balls.size, isFunnelLocked)
                     if (funnelFullAlertTimer > 0f) {
                         funnelFullAlertTimer = (funnelFullAlertTimer - dt).coerceAtLeast(0f)
@@ -359,7 +375,7 @@ fun GameBoardScreen(
                         if (col.bricks.isNotEmpty()) {
                             val top = col.bricks[0]
                             when (top.animState) {
-                                "hit_1", "hit_2" -> {
+                                "activate", "hit_1", "hit_2" -> {
                                     top.animTimer += dt
                                     if (top.animTimer >= 0.16f) {
                                         top.animState = "idle"
@@ -459,6 +475,91 @@ fun GameBoardScreen(
                         }
                     }
                     particles.removeAll(particlesToRemove)
+
+                    // Update Magnet returning balls (chain -> upper container pocket)
+                    if (magnetPulseTimer > 0f) {
+                        magnetPulseTimer = (magnetPulseTimer - dt).coerceAtLeast(0f)
+                    }
+                    if (magnetReturningBalls.isNotEmpty()) {
+                        for (mb in magnetReturningBalls) {
+                            mb.elapsed += dt
+                            if (!mb.landed && mb.elapsed >= mb.delay + mb.duration) {
+                                mb.landed = true
+                                val targetCell = grid[mb.targetRow][mb.targetCol]
+                                targetCell.ballCount = (targetCell.ballCount + 1).coerceAtMost(GameConstants.BALLS_PER_BLOCK)
+                                targetCell.scaleX = 1.16f
+                                targetCell.scaleY = 0.88f
+                                SoundManager.playBallClink()
+                                for (sp in 0 until 2) {
+                                    particles.add(
+                                        Particle(
+                                            x = mb.targetX,
+                                            y = mb.targetY,
+                                            vx = (Random.nextFloat() - 0.5f) * 44f,
+                                            vy = -18f - Random.nextFloat() * 28f,
+                                            color = 0xFF7CE7FF,
+                                            size = 2.4f,
+                                            maxLife = 0.35f
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                        magnetReturningBalls.removeAll { it.landed }
+                    }
+                    isMagnetActive = magnetReturningBalls.isNotEmpty()
+
+                    if (powerupOverlayTimer > 0f) {
+                        powerupOverlayTimer = (powerupOverlayTimer - dt).coerceAtLeast(0f)
+                        if (powerupOverlayTimer <= 0f) {
+                            activePowerupOverlayType = null
+                        }
+                    }
+
+                    // Smoothly recover upper grid container scale & finalize magnet_receiving state
+                    val scaleLerp = (dt * 14f).coerceIn(0f, 1f)
+                    for (r in 0 until GameConstants.GRID_ROWS) {
+                        for (c in 0 until GameConstants.GRID_COLS) {
+                            val cell = grid[r][c]
+                            if (cell.scaleX != 1f) {
+                                cell.scaleX += (1f - cell.scaleX) * scaleLerp
+                                if (kotlin.math.abs(1f - cell.scaleX) < 0.005f) cell.scaleX = 1f
+                            }
+                            if (cell.scaleY != 1f) {
+                                cell.scaleY += (1f - cell.scaleY) * scaleLerp
+                                if (kotlin.math.abs(1f - cell.scaleY) < 0.005f) cell.scaleY = 1f
+                            }
+                            if (cell.animState == "magnet_receiving") {
+                                val stillReceiving = magnetReturningBalls.any {
+                                    !it.landed && it.targetRow == r && it.targetCol == c
+                                }
+                                if (!stillReceiving) {
+                                    cell.animState = "idle"
+                                }
+                            } else if (cell.kind == CellKind.DISPENSER) {
+                                cell.animTimer += dt
+                                if (cell.animState == "cave_dispensing" && cell.animTimer >= 0.58f) {
+                                    cell.animState = "idle"
+                                    cell.animTimer = 0f
+                                }
+                            } else if (cell.kind == CellKind.BLOCK && cell.animState == "dispensing") {
+                                cell.animTimer += dt
+                                val p = ((cell.animTimer - 0.16f) / 0.34f).coerceIn(0f, 1f)
+                                val ease = 1f - (1f - p) * (1f - p) * (1f - p)
+                                cell.offsetY = -28f * (1f - ease)
+                                val popScale = 0.65f + 0.35f * ease
+                                cell.scaleX = popScale
+                                cell.scaleY = popScale
+                                if (cell.animTimer >= 0.50f) {
+                                    cell.offsetY = 0f
+                                    cell.scaleX = 1f
+                                    cell.scaleY = 1f
+                                    cell.animState = "idle"
+                                    cell.animTimer = 0f
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -481,25 +582,65 @@ fun GameBoardScreen(
 
         if (isPaused || gameState != "playing") return
 
-        // 2. Powerups placed at bottom area:
-        // Magnet: (x in 70..122, y in 595..655)
-        if (gameX in 70f..122f && gameY in 595f..655f) {
-            if (magnetCount > 0) {
-                SoundManager.playTap()
-                isMagnetActive = !isMagnetActive
-            } else {
-                SoundManager.playBlocked()
-            }
-            return
-        }
+        val arenaGameX = gameX
+        val arenaGameY = gameY - GameConstants.ARENA_SHIFT_Y
 
-        // Shuffle: (x in 130f..182f, y in 595f..655f)
-        if (gameX in 130f..182f && gameY in 595f..655f) {
-            if (shuffleCount > 0) {
-                val result = GameRules.performShufflePowerup(columns, beltBalls, physics.balls)
-                if (result.shuffled) {
-                    shuffleCount = (shuffleCount - 1).coerceAtLeast(0)
+        // 2. Powerups placed at bottom of arena (drawn inside arenaOffsetY at powerupY = 605f):
+        // Magnet drawn at RectF(86f, 605f, 134f, 653f) -> hitbox with badge padding: x in 80..140, y in 598..660
+        if (arenaGameX in 80f..140f && arenaGameY in 598f..660f) {
+            if (magnetCount > 0 && beltBalls.isNotEmpty() && magnetReturningBalls.isEmpty()) {
+                val assignments = GameRules.planMagnetReturn(grid, beltBalls.toList())
+                if (assignments.isNotEmpty()) {
+                    magnetCount = (magnetCount - 1).coerceAtLeast(0)
+                    isMagnetActive = true
+                    magnetPulseTimer = 0.90f
+                    activePowerupOverlayType = "magnet"
+                    powerupOverlayTimer = powerupOverlayDuration
+                    isTutorialDismissed = true
                     SoundManager.playPowerup()
+
+                    val staggerStep = if (assignments.size > 1) {
+                        minOf(0.040f, 0.44f / assignments.size)
+                    } else {
+                        0f
+                    }
+                    val pulledIds = mutableSetOf<Int>()
+
+                    assignments.forEachIndexed { idx, item ->
+                        pulledIds.add(item.beltBall.id)
+                        val coords = BeltPath.getBeltCoordinates(item.beltBall.s)
+                        val cx = GameConstants.GRID_X_CENTERS[item.targetCol]
+                        val cy = GameConstants.GRID_Y_CENTERS[item.targetRow]
+                        val slotRow = item.targetSlotIndex / 3
+                        val slotCol = item.targetSlotIndex % 3
+                        val targetX = cx + (crateColNormX[slotCol] - 0.5f) * 34f
+                        val targetY = cy + (crateRowNormY[slotRow] - 0.5f) * 33f
+
+                        val midX = (coords.x + targetX) * 0.5f
+                        val arcSide = if (coords.x < targetX) -22f else 22f
+                        val controlX = (midX + arcSide).coerceIn(22f, 274f)
+                        val controlY = (coords.y * 0.32f + targetY * 0.68f) - 20f
+
+                        magnetReturningBalls.add(
+                            MagnetReturningBall(
+                                id = item.beltBall.id,
+                                color = item.beltBall.color,
+                                startX = coords.x,
+                                startY = coords.y,
+                                controlX = controlX,
+                                controlY = controlY,
+                                targetX = targetX,
+                                targetY = targetY,
+                                targetRow = item.targetRow,
+                                targetCol = item.targetCol,
+                                targetSlotIndex = item.targetSlotIndex,
+                                elapsed = 0f,
+                                delay = idx * staggerStep,
+                                duration = 0.46f
+                            )
+                        )
+                    }
+                    beltBalls.removeAll { pulledIds.contains(it.id) }
                 } else {
                     SoundManager.playBlocked()
                 }
@@ -509,9 +650,46 @@ fun GameBoardScreen(
             return
         }
 
-        // 3. Upper Grid Blocks (accounting for vertical arena shift)
-        val arenaGameX = gameX
-        val arenaGameY = gameY - GameConstants.ARENA_SHIFT_Y
+        // Shuffle drawn at RectF(146f, 605f, 194f, 653f) -> hitbox with badge padding: x in 140..202, y in 598..660
+        if (arenaGameX > 140f && arenaGameX <= 202f && arenaGameY in 598f..660f) {
+            if (shuffleCount > 0) {
+                val result = GameRules.performShufflePowerup(columns, beltBalls, physics.balls)
+                if (result.shuffled) {
+                    shuffleCount = (shuffleCount - 1).coerceAtLeast(0)
+                    activePowerupOverlayType = "shuffle"
+                    powerupOverlayTimer = powerupOverlayDuration
+                    isTutorialDismissed = true
+                    SoundManager.playPowerup()
+                    for (colIdx in result.swappedColumns) {
+                        val col = columns.getOrNull(colIdx) ?: continue
+                        if (col.bricks.isNotEmpty()) {
+                            col.bricks[0].animState = "activate"
+                            col.bricks[0].animTimer = 0f
+                        }
+                        for (sp in 0 until 6) {
+                            particles.add(
+                                Particle(
+                                    x = col.x + (Random.nextFloat() - 0.5f) * 28f,
+                                    y = GameConstants.BALTI_SOCKET_Y + (Random.nextFloat() - 0.5f) * 18f,
+                                    vx = (Random.nextFloat() - 0.5f) * 90f,
+                                    vy = -35f - Random.nextFloat() * 55f,
+                                    color = 0xFFFFE600,
+                                    size = 2.8f + Random.nextFloat() * 2.2f,
+                                    maxLife = 0.45f
+                                )
+                            )
+                        }
+                    }
+                } else {
+                    SoundManager.playBlocked()
+                }
+            } else {
+                SoundManager.playBlocked()
+            }
+            return
+        }
+
+        // 3. Upper Grid Blocks (using same arena coordinates)
 
         val halfW = 18f
         val halfH = 17f
@@ -527,31 +705,10 @@ fun GameBoardScreen(
                 ) {
                     val cell = grid[r][c]
 
-                    // Magnet Power-up: pops any crate tapped!
-                    if (isMagnetActive) {
-                        if (cell.kind == CellKind.LOCKED || cell.kind == CellKind.BLOCK) {
-                            isFunnelLocked = GameRules.shouldBlockBlockTap(physics.balls.size, isFunnelLocked)
-                            if (isFunnelLocked) {
-                                SoundManager.playBlocked()
-                                funnelFullAlertTimer = 1.4f
-                                return
-                            }
-                            magnetCount = (magnetCount - 1).coerceAtLeast(0)
-                            isMagnetActive = false
-                            SoundManager.playPowerup()
-
-                            val burstColor = cell.color ?: MarbleColor.PURPLE
-                            grid[r][c] = GridCell(kind = CellKind.EMPTY)
-                            SoundManager.playPopBurst()
-                            physics.spawnBurst(cx, cy, burstColor, GameConstants.BALLS_PER_BLOCK)
-                            isFunnelLocked = GameRules.shouldBlockBlockTap(physics.balls.size, isFunnelLocked)
-                            score += 100
-                            GameRules.updateGridAfterChange(grid)
-                            return
-                        }
-                    }
-
-                    if (cell.kind == CellKind.BLOCK && GameRules.isExposed(grid, r, c)) {
+                    if (cell.kind == CellKind.BLOCK &&
+                        cell.animState != "magnet_receiving" &&
+                        GameRules.isExposed(grid, r, c)
+                    ) {
                         isFunnelLocked = GameRules.shouldBlockBlockTap(physics.balls.size, isFunnelLocked)
                         if (isFunnelLocked) {
                             SoundManager.playBlocked()
@@ -560,20 +717,62 @@ fun GameBoardScreen(
                         }
                         isTutorialDismissed = true
                         val burstColor = cell.color ?: MarbleColor.PURPLE
+                        val spawnCount = cell.ballCount.coerceIn(1, GameConstants.BALLS_PER_BLOCK)
                         grid[r][c] = GridCell(kind = CellKind.EMPTY)
                         SoundManager.playPopBurst()
-                        physics.spawnBurst(cx, cy, burstColor, GameConstants.BALLS_PER_BLOCK)
+                        physics.spawnBurst(cx, cy, burstColor, spawnCount)
                         isFunnelLocked = GameRules.shouldBlockBlockTap(physics.balls.size, isFunnelLocked)
                         score += 50
-                        GameRules.updateGridAfterChange(grid)
+                        val gridRes = GameRules.updateGridAfterChange(grid)
+                        for (disp in gridRes.dispensedCells) {
+                            val dispX = GameConstants.GRID_X_CENTERS[disp.dispenserC]
+                            val dispY = GameConstants.GRID_Y_CENTERS[disp.dispenserR]
+                            for (sp in 0 until 8) {
+                                particles.add(
+                                    Particle(
+                                        x = dispX + (Random.nextFloat() - 0.5f) * 20f,
+                                        y = dispY + 10f,
+                                        vx = (Random.nextFloat() - 0.5f) * 70f,
+                                        vy = 20f + Random.nextFloat() * 55f,
+                                        color = 0xFF38BDF8,
+                                        size = 2.6f,
+                                        maxLife = 0.42f
+                                    )
+                                )
+                            }
+                        }
                         return
                     } else if (cell.kind == CellKind.DISPENSER && (cell.counter ?: 0) > 0) {
                         val belowR = r + 1
                         if (belowR < GameConstants.GRID_ROWS && grid[belowR][c].kind == CellKind.EMPTY) {
                             SoundManager.playPopBurst()
                             val nextColor = if (cell.queue.isNotEmpty()) cell.queue.removeAt(0) else MarbleColor.PURPLE
+                            cell.color = nextColor
                             cell.counter = (cell.counter ?: 1) - 1
-                            grid[belowR][c] = GridCell(kind = CellKind.BLOCK, color = nextColor)
+                            cell.animState = "cave_dispensing"
+                            cell.animTimer = 0f
+                            grid[belowR][c] = GridCell(
+                                kind = CellKind.BLOCK,
+                                color = nextColor,
+                                animState = "dispensing",
+                                animTimer = 0f,
+                                scaleX = 0.65f,
+                                scaleY = 0.65f,
+                                offsetY = -28f
+                            )
+                            for (sp in 0 until 8) {
+                                particles.add(
+                                    Particle(
+                                        x = cx + (Random.nextFloat() - 0.5f) * 20f,
+                                        y = cy + 10f,
+                                        vx = (Random.nextFloat() - 0.5f) * 70f,
+                                        vy = 20f + Random.nextFloat() * 55f,
+                                        color = 0xFF38BDF8,
+                                        size = 2.6f,
+                                        maxLife = 0.42f
+                                    )
+                                )
+                            }
                             GameRules.updateGridAfterChange(grid)
                             return
                         }
@@ -673,18 +872,83 @@ fun GameBoardScreen(
 
                     when (cell.kind) {
                         CellKind.BLOCK -> {
+                            if (cell.animState == "dispensing" && cell.animTimer < 0.16f) {
+                                continue
+                            }
                             val col = cell.color ?: MarbleColor.PURPLE
                             val crateFullBmp = AssetLoader.getCrateFull(context, col)
                             val crateOpenBmp = AssetLoader.getCrateOpen(context, col)
-                            val bmp = crateFullBmp ?: crateOpenBmp
+                            val scaledW = crateW * cell.scaleX
+                            val scaledH = crateH * cell.scaleY
+                            val blockCy = cy + cell.offsetY
+                            val dstRect = RectF(
+                                cx - scaledW / 2f,
+                                blockCy - scaledH / 2f,
+                                cx + scaledW / 2f,
+                                blockCy + scaledH / 2f
+                            )
 
-                            if (bmp != null) {
-                                canvas.drawBitmap(
-                                    bmp,
-                                    null,
-                                    RectF(cx - crateW / 2f, cy - crateH / 2f, cx + crateW / 2f, cy + crateH / 2f),
-                                    null
+                            if (cell.animState == "magnet_receiving") {
+                                val magnetGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                    color = android.graphics.Color.parseColor("#6600F0FF")
+                                    style = Paint.Style.STROKE
+                                    strokeWidth = 2.4f
+                                }
+                                canvas.drawRoundRect(
+                                    RectF(dstRect.left - 2f, dstRect.top - 2f, dstRect.right + 2f, dstRect.bottom + 2f),
+                                    7f,
+                                    7f,
+                                    magnetGlow
                                 )
+                            }
+
+                            if (cell.ballCount >= GameConstants.BALLS_PER_BLOCK &&
+                                cell.animState != "magnet_receiving" &&
+                                crateFullBmp != null
+                            ) {
+                                canvas.drawBitmap(crateFullBmp, null, dstRect, null)
+                            } else {
+                                val containerBmp = crateOpenBmp ?: crateFullBmp
+                                if (containerBmp != null) {
+                                    canvas.drawBitmap(containerBmp, null, dstRect, null)
+                                }
+                                val seatedCount = cell.ballCount.coerceIn(0, GameConstants.BALLS_PER_BLOCK)
+                                if (seatedCount > 0) {
+                                    if (crateFullBmp != null) {
+                                        val clipR = 0.123f * minOf(scaledW, scaledH)
+                                        for (slotIdx in 0 until seatedCount) {
+                                            val sRow = slotIdx / 3
+                                            val sCol = slotIdx % 3
+                                            val slotCx = dstRect.left + crateColNormX[sCol] * scaledW
+                                            val slotCy = dstRect.top + crateRowNormY[sRow] * scaledH
+                                            canvas.save()
+                                            slotClipPath.reset()
+                                            slotClipPath.addCircle(slotCx, slotCy, clipR, Path.Direction.CW)
+                                            canvas.clipPath(slotClipPath)
+                                            canvas.drawBitmap(crateFullBmp, null, dstRect, null)
+                                            canvas.restore()
+                                        }
+                                    } else {
+                                        val ballBmp = AssetLoader.getBall(context, col)
+                                            ?: AssetLoader.getFluffy(context, col, "content")
+                                        if (ballBmp != null) {
+                                            val brX = 4.6f * cell.scaleX
+                                            val brY = 4.6f * cell.scaleY
+                                            for (slotIdx in 0 until seatedCount) {
+                                                val sRow = slotIdx / 3
+                                                val sCol = slotIdx % 3
+                                                val bx = dstRect.left + crateColNormX[sCol] * scaledW
+                                                val by = dstRect.top + crateRowNormY[sRow] * scaledH
+                                                canvas.drawBitmap(
+                                                    ballBmp,
+                                                    null,
+                                                    RectF(bx - brX, by - brY, bx + brX, by + brY),
+                                                    null
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -708,21 +972,108 @@ fun GameBoardScreen(
                         }
 
                         CellKind.DISPENSER -> {
-                            val caveBmp = AssetLoader.loadBitmap(context, "cave/cave_0.png")
-                            if (caveBmp != null) {
-                                canvas.drawBitmap(
-                                    caveBmp,
-                                    null,
-                                    RectF(cx - 24f, cy - 24f, cx + 24f, cy + 24f),
-                                    null
+                            val countNum = cell.counter ?: 0
+                            val isDispensing = cell.animState == "cave_dispensing"
+                            val t = cell.animTimer
+
+                            val frameIdx = when {
+                                isDispensing && t < 0.12f -> 1
+                                isDispensing && t < 0.24f -> 2
+                                isDispensing && t < 0.46f -> 3
+                                isDispensing -> 4
+                                countNum <= 0 -> 4
+                                else -> 0
+                            }
+
+                            val scaleFX: Float
+                            val scaleFY: Float
+                            val shakeX: Float
+                            if (isDispensing) {
+                                when {
+                                    t < 0.12f -> {
+                                        scaleFX = 1.06f; scaleFY = 0.94f; shakeX = 0f
+                                    }
+                                    t < 0.24f -> {
+                                        scaleFX = 0.97f; scaleFY = 1.05f; shakeX = 0f
+                                    }
+                                    t < 0.46f -> {
+                                        scaleFX = 1.04f; scaleFY = 1.02f; shakeX = sin(t * 75f) * 1.2f
+                                    }
+                                    else -> {
+                                        scaleFX = 1f; scaleFY = 1f; shakeX = 0f
+                                    }
+                                }
+                            } else if (countNum > 0) {
+                                val pulse = 1f + 0.025f * sin(t * 3.5f + c * 0.9f)
+                                scaleFX = pulse
+                                scaleFY = pulse
+                                shakeX = 0f
+                            } else {
+                                scaleFX = 0.96f; scaleFY = 0.96f; shakeX = 0f
+                            }
+
+                            val dispW = 34f * scaleFX
+                            val dispH = 31f * scaleFY
+                            val dispRect = RectF(
+                                cx + shakeX - dispW / 2f,
+                                cy - dispH / 2f,
+                                cx + shakeX + dispW / 2f,
+                                cy + dispH / 2f
+                            )
+
+                            if (isDispensing && t in 0.12f..0.46f) {
+                                val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                    color = android.graphics.Color.parseColor("#6638BDF8")
+                                }
+                                canvas.drawOval(
+                                    RectF(dispRect.left - 3f, dispRect.top, dispRect.right + 3f, dispRect.bottom + 5f),
+                                    glowPaint
                                 )
                             }
-                            // Counter in cave
-                            val countNum = cell.counter ?: 0
+
+                            val dispBmp = AssetLoader.getDispenserFrame(context, frameIdx)
+                            if (dispBmp != null) {
+                                val alphaPaint = if (countNum <= 0 && !isDispensing) {
+                                    Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = 175 }
+                                } else null
+                                canvas.drawBitmap(dispBmp, null, dispRect, alphaPaint)
+                            }
+
+                            // Colored tray emerging from mouth during burst phase
+                            if (isDispensing && t in 0.18f..0.42f) {
+                                val emergingColor = cell.color ?: cell.queue.firstOrNull() ?: MarbleColor.PURPLE
+                                val trayBmp = AssetLoader.getDispenserTray(context, emergingColor)
+                                if (trayBmp != null) {
+                                    val slide = ((t - 0.18f) / 0.24f).coerceIn(0f, 1f)
+                                    val trayW = 20f + 8f * slide
+                                    val trayH = 18f + 7f * slide
+                                    val trayY = cy + 6f + slide * 13f
+                                    canvas.drawBitmap(
+                                        trayBmp,
+                                        null,
+                                        RectF(cx - trayW / 2f, trayY - trayH / 2f, cx + trayW / 2f, trayY + trayH / 2f),
+                                        null
+                                    )
+                                }
+                            }
+
+                            // Counter badge in glossy dome center
                             if (countNum > 0) {
-                                textPaint.textSize = 12f
+                                val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                    color = android.graphics.Color.parseColor("#D9082952")
+                                    style = Paint.Style.FILL
+                                }
+                                val badgeStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                    color = android.graphics.Color.parseColor("#F5D061")
+                                    style = Paint.Style.STROKE
+                                    strokeWidth = 1f
+                                }
+                                val badgeRect = RectF(cx - 8f, cy - 11f, cx + 8f, cy + 1f)
+                                canvas.drawRoundRect(badgeRect, 5f, 5f, badgePaint)
+                                canvas.drawRoundRect(badgeRect, 5f, 5f, badgeStroke)
+                                textPaint.textSize = 9.5f
                                 textPaint.color = android.graphics.Color.WHITE
-                                canvas.drawText("$countNum", cx, cy + 2f, textPaint)
+                                canvas.drawText("$countNum", cx, cy - 2f, textPaint)
                             }
                         }
 
@@ -745,9 +1096,9 @@ fun GameBoardScreen(
                 }
             }
 
-            // Funnel Waiting Capacity Indicator (shows when >= 21 or funnel is locked at 30+)
+            // Funnel Waiting Capacity Indicator (shows when >= 16 or funnel is locked at 24+)
             val waitingCount = physics.balls.size
-            if (isFunnelLocked || funnelFullAlertTimer > 0f || waitingCount >= 21) {
+            if (isFunnelLocked || funnelFullAlertTimer > 0f || waitingCount >= 16) {
                 val pillColor = if (isFunnelLocked) {
                     android.graphics.Color.parseColor("#E93D5A")
                 } else {
@@ -775,20 +1126,20 @@ fun GameBoardScreen(
                 textPaint.textSize = 8.5f
                 textPaint.color = android.graphics.Color.WHITE
                 val label = if (isFunnelLocked || funnelFullAlertTimer > 0f) {
-                    "FULL $waitingCount/30"
+                    "FULL $waitingCount/${GameConstants.MAX_WAITING_BALLS}"
                 } else {
-                    "$waitingCount/30"
+                    "$waitingCount/${GameConstants.MAX_WAITING_BALLS}"
                 }
                 canvas.drawText(label, pillRect.centerX(), pillRect.centerY() + 3f, textPaint)
             }
 
             // Conveyor Belt Stadium Track Rendering (Matching exact conveyorRenderer.ts)
             val beltCenterY = (GameConstants.BELT_TOP_Y + GameConstants.BELT_BOTTOM_Y) / 2f // 474
-            val capsuleX = 38f
-            val capsuleW = 220f
-            val capsuleY = beltCenterY - 20f
-            val capsuleH = 40f
-            val capsuleRx = 20f
+            val capsuleX = 36f
+            val capsuleW = 224f
+            val capsuleY = beltCenterY - 22f
+            val capsuleH = 44f
+            val capsuleRx = 22f
 
             // 1. Stadium Capsule Fill with linear gradient
             val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -817,7 +1168,7 @@ fun GameBoardScreen(
             }
             canvas.drawRoundRect(RectF(58f, beltCenterY - 1.75f, 238f, beltCenterY + 1.75f), 1.75f, 1.75f, dividerPaint)
 
-            // 4. 30 Dark Dusty Purple Circular Socket Indentations (#5E4E6C)
+            // 4. 24 Dark Dusty Purple Circular Socket Indentations (#5E4E6C)
             val socketPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = android.graphics.Color.parseColor("#5E4E6C")
                 style = Paint.Style.FILL
@@ -831,8 +1182,8 @@ fun GameBoardScreen(
             for (i in 0 until GameConstants.BELT_CAPACITY) {
                 val s = (i * slotSpacing + beltScrollDistance) % BeltPath.TOTAL_PATH_LEN
                 val coords = BeltPath.getBeltCoordinates(s)
-                canvas.drawCircle(coords.x, coords.y, 6.8f, socketPaint)
-                canvas.drawCircle(coords.x, coords.y, 6.8f, socketBorderPaint)
+                canvas.drawCircle(coords.x, coords.y, 8.2f, socketPaint)
+                canvas.drawCircle(coords.x, coords.y, 8.2f, socketBorderPaint)
             }
 
             // 5. Conveyor Belt Fluffies with interactive animated expressions (winking, blinking, content)
@@ -1008,7 +1359,7 @@ fun GameBoardScreen(
             for (eff in fluffyEffects) {
                 val fluffyBmp = AssetLoader.getFluffy(context, eff.color, "happy_open")
                 if (fluffyBmp != null) {
-                    val r = 11.5f * eff.scale
+                    val r = 12.5f * eff.scale
                     val effPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         alpha = (eff.alpha * 255).toInt().coerceIn(0, 255)
                     }
@@ -1021,12 +1372,241 @@ fun GameBoardScreen(
                 }
             }
 
+            // Magnet Returning Balls (lifting out of chain and fitting smoothly into upper containers)
+            for (mb in magnetReturningBalls) {
+                if (mb.elapsed < mb.delay) {
+                    val wobble = sin(mb.elapsed * 42f) * 1.2f
+                    val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = android.graphics.Color.parseColor("#9900F0FF")
+                        style = Paint.Style.STROKE
+                        strokeWidth = 1.6f
+                    }
+                    val beltR = GameConstants.BALL_RADIUS_BELT * 1.35f
+                    canvas.drawCircle(mb.startX + wobble, mb.startY, beltR + 2f, haloPaint)
+                    val fluffyBmp = AssetLoader.getFluffy(context, mb.color, "surprised")
+                    if (fluffyBmp != null) {
+                        canvas.drawBitmap(
+                            fluffyBmp,
+                            null,
+                            RectF(
+                                mb.startX + wobble - beltR,
+                                mb.startY - beltR,
+                                mb.startX + wobble + beltR,
+                                mb.startY + beltR
+                            ),
+                            null
+                        )
+                    }
+                } else {
+                    val t = ((mb.elapsed - mb.delay) / mb.duration).coerceIn(0f, 1f)
+                    val e = 1f - (1f - t) * (1f - t) * (1f - t)
+
+                    fun bezierAt(u: Float): Pair<Float, Float> {
+                        val inv = 1f - u
+                        val px = inv * inv * mb.startX + 2f * inv * u * mb.controlX + u * u * mb.targetX
+                        val py = inv * inv * mb.startY + 2f * inv * u * mb.controlY + u * u * mb.targetY
+                        return Pair(px, py)
+                    }
+
+                    // Glowing magnetic flight trail
+                    for (trailIdx in 1..2) {
+                        val trailE = (e - trailIdx * 0.08f).coerceAtLeast(0f)
+                        if (trailE > 0f) {
+                            val (tx, ty) = bezierAt(trailE)
+                            val trailPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                color = android.graphics.Color.parseColor("#7CE7FF")
+                                alpha = (130 / trailIdx)
+                            }
+                            canvas.drawCircle(tx, ty, 3.8f - trailIdx * 0.8f, trailPaint)
+                        }
+                    }
+
+                    val (curX, curY) = bezierAt(e)
+                    val startR = GameConstants.BALL_RADIUS_BELT * 1.35f
+                    val endR = 0.123f * 33f
+                    val curR = startR + (endR - startR) * e
+
+                    // Soft cyan aura around flying ball
+                    val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = android.graphics.Color.parseColor("#6600F0FF")
+                    }
+                    canvas.drawCircle(curX, curY, curR + 2.2f * (1f - e), glowPaint)
+
+                    val sprite = if (e < 0.72f) {
+                        AssetLoader.getFluffy(context, mb.color, "happy_open")
+                            ?: AssetLoader.getBall(context, mb.color)
+                    } else {
+                        AssetLoader.getBall(context, mb.color)
+                            ?: AssetLoader.getFluffy(context, mb.color, "content")
+                    }
+                    if (sprite != null) {
+                        canvas.drawBitmap(
+                            sprite,
+                            null,
+                            RectF(curX - curR, curY - curR, curX + curR, curY + curR),
+                            null
+                        )
+                    }
+                }
+            }
+
             // Particles
             for (p in particles) {
                 val pPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = (p.color.toInt() and 0x00FFFFFF) or ((p.alpha * 255).toInt() shl 24)
                 }
                 canvas.drawCircle(p.x, p.y, p.size, pPaint)
+            }
+
+            // Dramatic Center-Screen Power-Up Surge (Big Magnet / Shuffle + Cracking Lightning Bolts)
+            val overlayType = activePowerupOverlayType
+            if (overlayType != null && powerupOverlayTimer > 0f) {
+                val p = (1f - powerupOverlayTimer / powerupOverlayDuration).coerceIn(0f, 1f)
+                val centerX = 148f
+                val centerY = 348f
+
+                val overlayScale = when {
+                    p < 0.16f -> {
+                        val t = p / 0.16f
+                        0.15f + 1.05f * (1f - (1f - t) * (1f - t))
+                    }
+                    p < 0.28f -> {
+                        val t = (p - 0.16f) / 0.12f
+                        1.20f - 0.20f * t
+                    }
+                    p < 0.76f -> {
+                        1.0f + sin(p * 34f) * 0.045f
+                    }
+                    else -> {
+                        val t = (p - 0.76f) / 0.24f
+                        1.0f - 0.75f * (t * t)
+                    }
+                }
+
+                val overlayAlpha = when {
+                    p < 0.10f -> (p / 0.10f)
+                    p > 0.76f -> ((1f - p) / 0.24f)
+                    else -> 1f
+                }.coerceIn(0f, 1f)
+
+                val isMagnetOverlay = overlayType == "magnet"
+                val primaryGlowHex = if (isMagnetOverlay) "#00F0FF" else "#FFE600"
+                val secondaryGlowHex = if (isMagnetOverlay) "#38BDF8" else "#C084FC"
+
+                // 1. Soft radial energy burst halo behind the big icon
+                val haloR = 88f * overlayScale
+                val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    shader = RadialGradient(
+                        centerX,
+                        centerY,
+                        haloR.coerceAtLeast(1f),
+                        intArrayOf(
+                            android.graphics.Color.parseColor(primaryGlowHex),
+                            android.graphics.Color.parseColor(secondaryGlowHex),
+                            android.graphics.Color.TRANSPARENT
+                        ),
+                        floatArrayOf(0f, 0.45f, 1f),
+                        Shader.TileMode.CLAMP
+                    )
+                    alpha = (185 * overlayAlpha).toInt().coerceIn(0, 255)
+                }
+                canvas.drawCircle(centerX, centerY, haloR, haloPaint)
+
+                // 2. Expanding electric shockwave rings
+                for (ringIdx in 0 until 2) {
+                    val ringP = ((p * 1.45f) - ringIdx * 0.22f).coerceIn(0f, 1f)
+                    if (ringP > 0f && ringP < 1f) {
+                        val ringRadius = 28f + ringP * 112f
+                        val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = android.graphics.Color.parseColor(if (ringIdx == 0) primaryGlowHex else "#FFFFFF")
+                            alpha = ((1f - ringP) * 210 * overlayAlpha).toInt().coerceIn(0, 255)
+                            style = Paint.Style.STROKE
+                            strokeWidth = 3.2f * (1f - ringP * 0.5f)
+                        }
+                        canvas.drawCircle(centerX, centerY, ringRadius, ringPaint)
+                    }
+                }
+
+                // 3. Jagged electric lightning bolts ("bijlia") crackling outward in all directions!
+                val boltPhase = (p * 22f).toInt()
+                val boltOuterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = android.graphics.Color.parseColor(primaryGlowHex)
+                    alpha = (230 * overlayAlpha).toInt().coerceIn(0, 255)
+                    style = Paint.Style.STROKE
+                    strokeWidth = 4.6f
+                    strokeCap = Paint.Cap.ROUND
+                    strokeJoin = Paint.Join.ROUND
+                }
+                val boltCorePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = android.graphics.Color.WHITE
+                    alpha = (255 * overlayAlpha).toInt().coerceIn(0, 255)
+                    style = Paint.Style.STROKE
+                    strokeWidth = 1.9f
+                    strokeCap = Paint.Cap.ROUND
+                    strokeJoin = Paint.Join.ROUND
+                }
+                val sparkTipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = android.graphics.Color.WHITE
+                    alpha = (240 * overlayAlpha).toInt().coerceIn(0, 255)
+                }
+
+                val numBolts = 10
+                val reachScale = sin(p.coerceIn(0.05f, 0.95f) * PI.toFloat()).coerceIn(0.2f, 1f)
+                for (bIdx in 0 until numBolts) {
+                    val rng = kotlin.random.Random(bIdx * 97 + boltPhase * 31)
+                    val baseAngle = (bIdx * (2f * PI.toFloat() / numBolts)) + (rng.nextFloat() - 0.5f) * 0.25f
+                    val startDist = 26f * overlayScale
+                    val endDist = (78f + rng.nextFloat() * 58f) * reachScale
+
+                    val perpX = -sin(baseAngle)
+                    val perpY = cos(baseAngle)
+
+                    val boltPath = android.graphics.Path()
+                    val segments = 4
+                    var tipX = centerX
+                    var tipY = centerY
+                    for (seg in 0..segments) {
+                        val frac = seg.toFloat() / segments
+                        val dist = startDist + (endDist - startDist) * frac
+                        val jitter = if (seg == 0) 0f else (rng.nextFloat() - 0.5f) * 22f * (0.4f + frac * 0.6f)
+                        val px = centerX + cos(baseAngle) * dist + perpX * jitter
+                        val py = centerY + sin(baseAngle) * dist + perpY * jitter
+                        if (seg == 0) {
+                            boltPath.moveTo(px, py)
+                        } else {
+                            boltPath.lineTo(px, py)
+                        }
+                        tipX = px
+                        tipY = py
+                    }
+
+                    canvas.drawPath(boltPath, boltOuterPaint)
+                    canvas.drawPath(boltPath, boltCorePaint)
+                    canvas.drawCircle(tipX, tipY, 2.4f, sparkTipPaint)
+                }
+
+                // 4. Big Animated Center Power-up Sprite (6-frame lightning strip)
+                val strip = if (isMagnetOverlay) magnetLightningStrip else shuffleLightningStrip
+                val fallbackBtn = if (isMagnetOverlay) magnetBtnBitmap else shuffleBtnBitmap
+                val halfIcon = 54f * overlayScale
+                val iconRect = RectF(
+                    centerX - halfIcon,
+                    centerY - halfIcon,
+                    centerX + halfIcon,
+                    centerY + halfIcon
+                )
+                val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    alpha = (255 * overlayAlpha).toInt().coerceIn(0, 255)
+                }
+
+                if (strip != null && strip.width >= 6) {
+                    val frameW = strip.width / 6
+                    val frameIdx = ((p * 12f).toInt() % 6).coerceIn(0, 5)
+                    val srcRect = Rect(frameIdx * frameW, 0, (frameIdx + 1) * frameW, strip.height)
+                    canvas.drawBitmap(strip, srcRect, iconRect, iconPaint)
+                } else if (fallbackBtn != null) {
+                    canvas.drawBitmap(fallbackBtn, null, iconRect, iconPaint)
+                }
             }
 
             // Level 1 Animated Pressing Tutorial Hand
@@ -1146,6 +1726,16 @@ fun GameBoardScreen(
             // Powerups (🧲 Magnet & 🔀 Shuffle) positioned at the bottom of the arena
             val powerupY = 605f
             // Magnet (bottom left of center)
+            if (magnetPulseTimer > 0f || isMagnetActive) {
+                val pulseP = (magnetPulseTimer / 0.90f).coerceIn(0f, 1f)
+                val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = android.graphics.Color.parseColor("#00F0FF")
+                    alpha = (180 * maxOf(pulseP, if (isMagnetActive) 0.65f else 0f)).toInt().coerceIn(0, 255)
+                    style = Paint.Style.STROKE
+                    strokeWidth = 2.6f
+                }
+                canvas.drawCircle(110f, powerupY + 24f, 25f + (1f - pulseP) * 6f, ringPaint)
+            }
             if (magnetBtnBitmap != null) {
                 canvas.drawBitmap(
                     magnetBtnBitmap,
@@ -1154,11 +1744,11 @@ fun GameBoardScreen(
                     null
                 )
             }
-            val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            val magnetBadgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = android.graphics.Color.parseColor(if (isMagnetActive) "#00F0FF" else "#FF3D68")
                 style = Paint.Style.FILL
             }
-            canvas.drawCircle(130f, powerupY + 44f, 8f, badgePaint)
+            canvas.drawCircle(130f, powerupY + 44f, 8f, magnetBadgePaint)
             textPaint.textSize = 9.5f
             textPaint.color = android.graphics.Color.WHITE
             canvas.drawText("$magnetCount", 130f, powerupY + 47.5f, textPaint)
@@ -1172,7 +1762,11 @@ fun GameBoardScreen(
                     null
                 )
             }
-            canvas.drawCircle(190f, powerupY + 44f, 8f, badgePaint)
+            val shuffleBadgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.parseColor("#FF3D68")
+                style = Paint.Style.FILL
+            }
+            canvas.drawCircle(190f, powerupY + 44f, 8f, shuffleBadgePaint)
             canvas.drawText("$shuffleCount", 190f, powerupY + 47.5f, textPaint)
 
             canvas.restore()

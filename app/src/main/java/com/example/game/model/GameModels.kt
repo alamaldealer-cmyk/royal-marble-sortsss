@@ -37,7 +37,8 @@ data class GridCell(
     var spawnedCount: Int = 0,
     var scaleX: Float = 1f,
     var scaleY: Float = 1f,
-    var offsetY: Float = 0f
+    var offsetY: Float = 0f,
+    var ballCount: Int = 9
 ) {
     fun deepCopy(): GridCell {
         return GridCell(
@@ -52,7 +53,8 @@ data class GridCell(
             spawnedCount = spawnedCount,
             scaleX = scaleX,
             scaleY = scaleY,
-            offsetY = offsetY
+            offsetY = offsetY,
+            ballCount = ballCount
         )
     }
 }
@@ -143,6 +145,24 @@ data class FluffyVanishEffect(
     var alpha: Float = 1f,
     var progress: Float = 0f,
     val duration: Float = 0.45f
+)
+
+data class MagnetReturningBall(
+    val id: Int,
+    val color: MarbleColor,
+    val startX: Float,
+    val startY: Float,
+    val controlX: Float,
+    val controlY: Float,
+    val targetX: Float,
+    val targetY: Float,
+    val targetRow: Int,
+    val targetCol: Int,
+    val targetSlotIndex: Int,
+    var elapsed: Float = 0f,
+    val delay: Float = 0f,
+    val duration: Float = 0.46f,
+    var landed: Boolean = false
 )
 
 data class LevelData(

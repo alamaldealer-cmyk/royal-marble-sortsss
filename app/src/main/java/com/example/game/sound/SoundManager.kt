@@ -28,6 +28,10 @@ object SoundManager {
     private var sfxBlocked = 0
     private var sfxFluffyCheer = 0
     private var sfxWin = 0
+    private var sfxUfoArrive = 0
+    private var sfxUfoBeam = 0
+    private var sfxStoryWhoosh = 0
+    private var activeStoryStreamId = 0
 
     // Combo pitch escalation (Candy Crush style rising cascade)
     private var lastPopTimeMs = 0L
@@ -75,6 +79,9 @@ object SoundManager {
         sfxBlocked = loadSfx("sfx_blocked.wav")
         sfxFluffyCheer = loadSfx("sfx_fluffy_cheer.wav")
         sfxWin = loadSfx("sfx_win.wav")
+        sfxUfoArrive = loadSfx("sfx_ufo_arrive.wav")
+        sfxUfoBeam = loadSfx("sfx_ufo_beam.wav")
+        sfxStoryWhoosh = loadSfx("sfx_story_whoosh.wav")
 
         soundPool = pool
         initialized = true
@@ -205,5 +212,38 @@ object SoundManager {
 
     fun playWin() {
         playSample(sfxWin, volume = 0.95f, rate = 1.0f, priority = 4)
+    }
+
+    fun stopStorySfx() {
+        val streamId = activeStoryStreamId
+        if (streamId != 0) {
+            try {
+                soundPool?.stop(streamId)
+            } catch (_: Exception) {
+            }
+            activeStoryStreamId = 0
+        }
+    }
+
+    private fun playStorySample(sampleId: Int, volume: Float = 0.92f) {
+        stopStorySfx()
+        if (!enabled || sampleId == 0) return
+        val pool = soundPool ?: return
+        try {
+            activeStoryStreamId = pool.play(sampleId, volume, volume, 4, 0, 1.0f)
+        } catch (_: Exception) {
+        }
+    }
+
+    fun playUfoArrive() {
+        playStorySample(sfxUfoArrive, volume = 0.95f)
+    }
+
+    fun playUfoBeam() {
+        playStorySample(sfxUfoBeam, volume = 0.95f)
+    }
+
+    fun playStoryWhoosh() {
+        playStorySample(sfxStoryWhoosh, volume = 0.90f)
     }
 }

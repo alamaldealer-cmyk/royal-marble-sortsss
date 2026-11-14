@@ -5,7 +5,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,19 +20,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import com.example.game.assets.AssetLoader
-import com.example.game.sound.SoundManager
-import com.example.ui.screens.GameBoardScreen
-import com.example.ui.screens.HomeScreen
-import com.example.ui.screens.SplashScreen
-import com.example.ui.theme.MyApplicationTheme
-
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.game.assets.AssetLoader
+import com.example.game.sound.SoundManager
+import com.example.game.story.StoryCatalog
+import com.example.game.story.StoryEpisode
+import com.example.ui.screens.GameBoardScreen
+import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.SplashScreen
+import com.example.ui.screens.StoryCutsceneScreen
+import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,7 +59,9 @@ fun RoyalMarblesApp() {
     val prefs = remember { context.getSharedPreferences("royal_marbles_prefs", Context.MODE_PRIVATE) }
 
     var showSplash by remember { mutableStateOf(true) }
-    var currentView by remember { mutableStateOf("home") } // "home" or "playing"
+    var currentView by remember { mutableStateOf("home") } // "home", "story", or "playing"
+    var activeStory by remember { mutableStateOf<StoryEpisode?>(null) }
+    var storyReturnToHome by remember { mutableStateOf(false) }
 
     var coins by remember {
         mutableIntStateOf(prefs.getInt("coins", 19330))
@@ -140,54 +143,95 @@ fun RoyalMarblesApp() {
             .apply()
     }
 
+    fun startPlayingWithOptionalStory(targetLevel: Int) {
+        val story = StoryCatalog.storyForStartingLevel(targetLevel)
+        if (story != null) {
+            activeStory = story
+            storyReturnToHome = false
+            currentView = "story"
+        } else {
+            currentView = "playing"
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF002766))
     ) {
-        if (currentView == "playing") {
-            BackHandler {
-                currentView = "home"
-            }
-
-            key(currentLevel) {
-                GameBoardScreen(
-                    levelNumber = currentLevel,
-                    coins = coins,
-                    onReturnHome = { currentView = "home" },
-                    onAddCoins = { amount -> saveCoins(coins + amount) },
-                    onLevelAdvanced = { nextLvl -> saveLevel(nextLvl) }
+        when (currentView) {
+            "story" -> {
+                val episode = activeStory ?: StoryCatalog.chapters.first()
+                StoryCutsceneScreen(
+                    episode = episode,
+                    levelToStart = currentLevel,
+                    onComplete = {
+                        currentView = if (storyReturnToHome) "home" else "playing"
+                    }
                 )
             }
-        } else {
-            HomeScreen(
-                levelNumber = currentLevel,
-                coins = coins,
-                playerName = playerName,
-                selectedAvatarId = selectedAvatarId,
-                soundEnabled = soundEnabled,
-                musicEnabled = musicEnabled,
-                vibrationEnabled = vibrationEnabled,
-                onStartGame = { currentView = "playing" },
-                onAddCoins = { amount -> saveCoins(coins + amount) },
-                onUpdateProfile = { newName, newAvatarId -> saveProfile(newName, newAvatarId) },
-                onSetLevel = { newLevel -> saveLevel(newLevel) },
-                onToggleSound = {
-                    val next = !soundEnabled
-                    soundEnabled = next
-                    prefs.edit().putBoolean("sound_enabled", next).apply()
-                },
-                onToggleMusic = {
-                    val next = !musicEnabled
-                    musicEnabled = next
-                    prefs.edit().putBoolean("music_enabled", next).apply()
-                },
-                onToggleVibration = {
-                    val next = !vibrationEnabled
-                    vibrationEnabled = next
-                    prefs.edit().putBoolean("vibration_enabled", next).apply()
+
+            "playing" -> {
+                BackHandler {
+                    currentView = "home"
                 }
-            )
+
+                key(currentLevel) {
+                    GameBoardScreen(
+                        levelNumber = currentLevel,
+                        coins = coins,
+                        onReturnHome = { currentView = "home" },
+                        onAddCoins = { amount -> saveCoins(coins + amount) },
+                        onLevelAdvanced = { nextLvl ->
+                            if (nextLvl > 100) {
+                                saveLevel(1)
+                                activeStory = StoryCatalog.grandFinale
+                                storyReturnToHome = true
+                                currentView = "story"
+                            } else {
+                                saveLevel(nextLvl)
+                                val milestoneStory = StoryCatalog.storyForStartingLevel(nextLvl)
+                                if (milestoneStory != null) {
+                                    activeStory = milestoneStory
+                                    storyReturnToHome = false
+                                    currentView = "story"
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+
+            else -> {
+                HomeScreen(
+                    levelNumber = currentLevel,
+                    coins = coins,
+                    playerName = playerName,
+                    selectedAvatarId = selectedAvatarId,
+                    soundEnabled = soundEnabled,
+                    musicEnabled = musicEnabled,
+                    vibrationEnabled = vibrationEnabled,
+                    onStartGame = { startPlayingWithOptionalStory(currentLevel) },
+                    onAddCoins = { amount -> saveCoins(coins + amount) },
+                    onUpdateProfile = { newName, newAvatarId -> saveProfile(newName, newAvatarId) },
+                    onSetLevel = { newLevel -> saveLevel(newLevel) },
+                    onToggleSound = {
+                        val next = !soundEnabled
+                        soundEnabled = next
+                        prefs.edit().putBoolean("sound_enabled", next).apply()
+                    },
+                    onToggleMusic = {
+                        val next = !musicEnabled
+                        musicEnabled = next
+                        prefs.edit().putBoolean("music_enabled", next).apply()
+                    },
+                    onToggleVibration = {
+                        val next = !vibrationEnabled
+                        vibrationEnabled = next
+                        prefs.edit().putBoolean("vibration_enabled", next).apply()
+                    }
+                )
+            }
         }
 
         if (showSplash) {
