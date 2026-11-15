@@ -89,7 +89,6 @@ fun BottomNav(
         // Hit areas
         for (tab in NavTab.entries) {
             val area = currentAreas[tab] ?: continue
-            val interactionSource = remember { MutableInteractionSource() }
 
             Box(
                 modifier = Modifier
@@ -98,7 +97,7 @@ fun BottomNav(
                     .height(totalHeight * area.height)
                     .testTag("nav_tab_${tab.name.lowercase()}")
                     .clickable(
-                        interactionSource = interactionSource,
+                        interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) {
                         SoundManager.playTap()

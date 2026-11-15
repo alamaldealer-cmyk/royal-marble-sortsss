@@ -107,7 +107,13 @@ object AssetLoader {
             "cave/cave_right_tray.png",
             "cave/cave_left_idle.png",
             "cave/cave_left_glow.png",
-            "cave/cave_left_tray.png"
+            "cave/cave_left_tray.png",
+            "cave/dispenser_hood_0.png",
+            "cave/dispenser_hood_1.png",
+            "cave/dispenser_hood_2.png",
+            "cave/dispenser_hood_3.png",
+            "cave/dispenser_hood_4.png",
+            "cave/dispenser_hood_5.png"
         )
         for (path in criticalAssets) {
             loadBitmap(context, path)
@@ -302,6 +308,11 @@ object AssetLoader {
         val idx = frameIndex.coerceIn(0, 4)
         return loadBitmap(context, "cave/dispenser_$idx.png")
             ?: loadBitmap(context, "cave/cave_0.png")
+    }
+
+    fun getDispenserHoodFrame(context: Context, frameIndex: Int): Bitmap? {
+        val idx = frameIndex.coerceIn(0, 5)
+        return loadBitmap(context, "cave/dispenser_hood_$idx.png")
     }
 
     fun getCrystalCaveFrame(

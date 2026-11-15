@@ -26,7 +26,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.dp
+import com.example.ui.components.BucketFluffyRenderer
 import com.example.ui.components.UniversalCoinRack
+import com.example.ui.components.bouncyClickTarget
+import com.example.ui.components.bouncyScale
+import com.example.ui.components.rememberBouncyPressState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -821,33 +827,37 @@ fun GameBoardScreen(
                                     cell.animState = "idle"
                                 }
                             } else if (cell.kind == CellKind.DISPENSER) {
-                                cell.animTimer += dt
-                                if (cell.animState == "cave_dispensing" && cell.animTimer >= 0.58f) {
-                                    cell.animState = "idle"
+                                if (cell.animState == "cave_dispensing") {
+                                    cell.animTimer += dt
+                                    if (cell.animTimer >= 0.56f) {
+                                        cell.animState = "idle"
+                                        cell.animTimer = 0f
+                                    }
+                                } else {
                                     cell.animTimer = 0f
                                 }
                             } else if (cell.kind == CellKind.BLOCK && cell.animState == "dispensing") {
                                 cell.animTimer += dt
-                                val p = ((cell.animTimer - 0.16f) / 0.34f).coerceIn(0f, 1f)
+                                val p = ((cell.animTimer - 0.08f) / 0.36f).coerceIn(0f, 1f)
                                 val ease = 1f - (1f - p) * (1f - p) * (1f - p)
                                 when (cell.direction) {
                                     DispenserDirection.DOWN -> {
                                         cell.offsetX = 0f
-                                        cell.offsetY = -28f * (1f - ease)
+                                        cell.offsetY = -30f * (1f - ease)
                                     }
                                     DispenserDirection.RIGHT -> {
-                                        cell.offsetX = -28f * (1f - ease)
+                                        cell.offsetX = -30f * (1f - ease)
                                         cell.offsetY = 0f
                                     }
                                     DispenserDirection.LEFT -> {
-                                        cell.offsetX = 28f * (1f - ease)
+                                        cell.offsetX = 30f * (1f - ease)
                                         cell.offsetY = 0f
                                     }
                                 }
-                                val popScale = 0.65f + 0.35f * ease
+                                val popScale = 0.72f + 0.28f * ease + 0.045f * sin(p * PI.toFloat())
                                 cell.scaleX = popScale
                                 cell.scaleY = popScale
-                                if (cell.animTimer >= 0.50f) {
+                                if (cell.animTimer >= 0.48f) {
                                     cell.offsetX = 0f
                                     cell.offsetY = 0f
                                     cell.scaleX = 1f
@@ -1099,7 +1109,7 @@ fun GameBoardScreen(
                 ) {
                     val cell = grid[r][c]
 
-                    if (cell.kind == CellKind.BLOCK &&
+                    if ((cell.kind == CellKind.BLOCK || (cell.kind == CellKind.LOCKED && cell.linkGroup != null)) &&
                         cell.animState != "magnet_receiving" &&
                         GameRules.isExposed(grid, r, c)
                     ) {
@@ -1115,18 +1125,42 @@ fun GameBoardScreen(
                             return
                         }
                         isTutorialDismissed = true
-                        val burstColor = cell.color ?: MarbleColor.PURPLE
-                        val spawnCount = cell.ballCount.coerceIn(1, GameConstants.BALLS_PER_BLOCK)
-                        grid[r][c] = GridCell(kind = CellKind.EMPTY)
+                        val burstCells = GameRules.collectLinkedBurstCells(grid, r, c)
                         SoundManager.playPopBurst()
-                        physics.spawnBurst(cx, cy, burstColor, spawnCount)
+                        for ((br, bc) in burstCells) {
+                            val bCell = grid[br][bc]
+                            val burstColor = bCell.color ?: MarbleColor.PURPLE
+                            val spawnCount = bCell.ballCount.coerceIn(1, GameConstants.BALLS_PER_BLOCK)
+                            val bcx = GameConstants.GRID_X_CENTERS[bc]
+                            val bcy = GameConstants.GRID_Y_CENTERS[br]
+                            grid[br][bc] = GridCell(kind = CellKind.EMPTY)
+                            physics.spawnBurst(bcx, bcy, burstColor, spawnCount)
+                            score += 50
+                            if (burstCells.size > 1) {
+                                for (sp in 0 until 8) {
+                                    val ang = sp * (2f * PI.toFloat() / 8f)
+                                    val spd = 36f + Random.nextFloat() * 44f
+                                    particles.add(
+                                        Particle(
+                                            x = bcx,
+                                            y = bcy,
+                                            vx = cos(ang) * spd,
+                                            vy = sin(ang) * spd,
+                                            color = if (sp % 2 == 0) 0xFFFFFFFF else 0xFFFFE494,
+                                            size = 2.6f,
+                                            shape = ParticleShape.SPARKLE,
+                                            maxLife = 0.36f
+                                        )
+                                    )
+                                }
+                            }
+                        }
                         isFunnelLocked = GameRules.shouldBlockBlockTap(
                             waitingBallsCount = physics.balls.size,
                             currentlyLocked = isFunnelLocked,
                             maxWaitingBalls = maxWaitingBalls,
                             resumeWaitingBalls = resumeWaitingBalls
                         )
-                        score += 50
                         val gridRes = GameRules.updateGridAfterChange(grid)
                         for (disp in gridRes.dispensedCells) {
                             val dispX = GameConstants.GRID_X_CENTERS[disp.dispenserC]
@@ -1293,6 +1327,78 @@ fun GameBoardScreen(
             // Upper Grid Crates (Aligned to prevent overlapping neighboring crates)
             val crateW = 34f
             val crateH = 33f
+
+            fun isCrateRenderable(cell: GridCell): Boolean {
+                return (cell.kind == CellKind.BLOCK || cell.kind == CellKind.LOCKED) &&
+                    !(cell.kind == CellKind.BLOCK && cell.animState == "dispensing" && cell.animTimer < 0.16f)
+            }
+
+            // Connected-pair crisp white outer frame pass (rendered beneath linked crates)
+            val linkFrameFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                style = Paint.Style.FILL
+            }
+            val linkFrameShadow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.parseColor("#30000000")
+                style = Paint.Style.STROKE
+                strokeWidth = 1.2f
+            }
+            for (r in 0 until GameConstants.GRID_ROWS) {
+                for (c in 0 until GameConstants.GRID_COLS) {
+                    val cell = grid[r][c]
+                    val group = cell.linkGroup ?: continue
+                    if (!isCrateRenderable(cell)) continue
+                    val cx = GameConstants.GRID_X_CENTERS[c] + cell.offsetX
+                    val cy = GameConstants.GRID_Y_CENTERS[r] + cell.offsetY
+                    val hw = (crateW * cell.scaleX) / 2f + 0.4f
+                    val hh = (crateH * cell.scaleY) / 2f + 0.3f
+
+                    var drewPair = false
+                    if (c + 1 < GameConstants.GRID_COLS) {
+                        val right = grid[r][c + 1]
+                        if (right.linkGroup == group && isCrateRenderable(right)) {
+                            val rcx = GameConstants.GRID_X_CENTERS[c + 1] + right.offsetX
+                            val rcy = GameConstants.GRID_Y_CENTERS[r] + right.offsetY
+                            val pairRect = RectF(
+                                minOf(cx - hw, rcx - hw),
+                                minOf(cy - hh, rcy - hh),
+                                maxOf(cx + hw, rcx + hw),
+                                maxOf(cy + hh, rcy + hh)
+                            )
+                            canvas.drawRoundRect(pairRect, 7.2f, 7.2f, linkFrameFill)
+                            canvas.drawRoundRect(pairRect, 7.2f, 7.2f, linkFrameShadow)
+                            drewPair = true
+                        }
+                    }
+                    if (r + 1 < GameConstants.GRID_ROWS) {
+                        val below = grid[r + 1][c]
+                        if (below.linkGroup == group && isCrateRenderable(below)) {
+                            val bcx = GameConstants.GRID_X_CENTERS[c] + below.offsetX
+                            val bcy = GameConstants.GRID_Y_CENTERS[r + 1] + below.offsetY
+                            val pairRect = RectF(
+                                minOf(cx - hw, bcx - hw),
+                                minOf(cy - hh, bcy - hh),
+                                maxOf(cx + hw, bcx + hw),
+                                maxOf(cy + hh, bcy + hh)
+                            )
+                            canvas.drawRoundRect(pairRect, 7.2f, 7.2f, linkFrameFill)
+                            canvas.drawRoundRect(pairRect, 7.2f, 7.2f, linkFrameShadow)
+                            drewPair = true
+                        }
+                    }
+                    if (!drewPair) {
+                        val hasLeft = c > 0 && grid[r][c - 1].linkGroup == group && isCrateRenderable(grid[r][c - 1])
+                        val hasAbove = r > 0 && grid[r - 1][c].linkGroup == group && isCrateRenderable(grid[r - 1][c])
+                        if (!hasLeft && !hasAbove) {
+                            val singleRect = RectF(cx - hw, cy - hh, cx + hw, cy + hh)
+                            canvas.drawRoundRect(singleRect, 7.2f, 7.2f, linkFrameFill)
+                            canvas.drawRoundRect(singleRect, 7.2f, 7.2f, linkFrameShadow)
+                        }
+                    }
+                }
+            }
+
+            // Pass 1: Draw BLOCK and LOCKED cells (emerging blocks clip cleanly at the cave mouth plane)
             for (r in 0 until GameConstants.GRID_ROWS) {
                 for (c in 0 until GameConstants.GRID_COLS) {
                     val cell = grid[r][c]
@@ -1301,14 +1407,16 @@ fun GameBoardScreen(
 
                     when (cell.kind) {
                         CellKind.BLOCK -> {
-                            if (cell.animState == "dispensing" && cell.animTimer < 0.16f) {
+                            val isEmergingFromCave = cell.animState == "dispensing"
+                            if (isEmergingFromCave && cell.animTimer < 0.08f) {
                                 continue
                             }
                             val col = cell.color ?: MarbleColor.PURPLE
                             val crateFullBmp = AssetLoader.getCrateFull(context, col)
                             val crateOpenBmp = AssetLoader.getCrateOpen(context, col)
-                            val scaledW = crateW * cell.scaleX
-                            val scaledH = crateH * cell.scaleY
+                            val linkInset = if (cell.linkGroup != null) 3.0f else 0f
+                            val scaledW = (crateW - linkInset) * cell.scaleX
+                            val scaledH = (crateH - linkInset) * cell.scaleY
                             val blockCx = cx + cell.offsetX
                             val blockCy = cy + cell.offsetY
                             val dstRect = RectF(
@@ -1317,6 +1425,37 @@ fun GameBoardScreen(
                                 blockCx + scaledW / 2f,
                                 blockCy + scaledH / 2f
                             )
+
+                            canvas.save()
+                            if (isEmergingFromCave) {
+                                // Clip the back side so the bucket only emerges out of the dispenser mouth, never poking behind the dome
+                                when (cell.direction) {
+                                    DispenserDirection.DOWN -> {
+                                        canvas.clipRect(
+                                            -12f,
+                                            cy - GameConstants.CELL_PITCH_Y + 4f,
+                                            GameConstants.BASE_WIDTH + 12f,
+                                            GameConstants.BASE_HEIGHT + 12f
+                                        )
+                                    }
+                                    DispenserDirection.RIGHT -> {
+                                        canvas.clipRect(
+                                            cx - GameConstants.CELL_PITCH_X + 4f,
+                                            -12f,
+                                            GameConstants.BASE_WIDTH + 12f,
+                                            GameConstants.BASE_HEIGHT + 12f
+                                        )
+                                    }
+                                    DispenserDirection.LEFT -> {
+                                        canvas.clipRect(
+                                            -12f,
+                                            -12f,
+                                            cx + GameConstants.CELL_PITCH_X - 4f,
+                                            GameConstants.BASE_HEIGHT + 12f
+                                        )
+                                    }
+                                }
+                            }
 
                             if (cell.animState == "magnet_receiving") {
                                 val magnetGlow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -1332,7 +1471,13 @@ fun GameBoardScreen(
                                 )
                             }
 
-                            if (cell.ballCount >= GameConstants.BALLS_PER_BLOCK &&
+                            if (cell.isMystery && cell.animState != "magnet_receiving") {
+                                val mysteryBmp = AssetLoader.loadBitmap(context, "crates/crate_mystery.png")
+                                    ?: crateFullBmp
+                                if (mysteryBmp != null) {
+                                    canvas.drawBitmap(mysteryBmp, null, dstRect, null)
+                                }
+                            } else if (cell.ballCount >= GameConstants.BALLS_PER_BLOCK &&
                                 cell.animState != "magnet_receiving" &&
                                 crateFullBmp != null
                             ) {
@@ -1365,6 +1510,7 @@ fun GameBoardScreen(
                                     }
                                 }
                             }
+                            canvas.restore()
                         }
 
                         CellKind.LOCKED -> {
@@ -1377,138 +1523,220 @@ fun GameBoardScreen(
                             }
 
                             if (bmp != null) {
+                                val linkInset = if (cell.linkGroup != null) 1.5f else 0f
                                 canvas.drawBitmap(
                                     bmp,
                                     null,
-                                    RectF(cx - crateW / 2f, cy - crateH / 2f, cx + crateW / 2f, cy + crateH / 2f),
+                                    RectF(
+                                        cx - crateW / 2f + linkInset,
+                                        cy - crateH / 2f + linkInset,
+                                        cx + crateW / 2f - linkInset,
+                                        cy + crateH / 2f - linkInset
+                                    ),
                                     null
                                 )
                             }
                         }
 
-                        CellKind.DISPENSER -> {
-                            val countNum = cell.counter ?: 0
-                            val isDispensing = cell.animState == "cave_dispensing"
-                            val t = cell.animTimer
+                        else -> {}
+                    }
+                }
+            }
 
-                            val cavePhase = when {
-                                isDispensing && t < 0.18f -> "glow"
-                                isDispensing && t < 0.46f -> "tray"
-                                else -> "idle"
+            // Pass 2: Draw DISPENSER hoods ON TOP so emerging buckets visibly slide out from inside the cave rim
+            for (r in 0 until GameConstants.GRID_ROWS) {
+                for (c in 0 until GameConstants.GRID_COLS) {
+                    val cell = grid[r][c]
+                    if (cell.kind != CellKind.DISPENSER) continue
+
+                    val cx = GameConstants.GRID_X_CENTERS[c]
+                    val cy = GameConstants.GRID_Y_CENTERS[r]
+                    val countNum = cell.counter ?: 0
+                    val isDispensing = cell.animState == "cave_dispensing"
+                    val t = cell.animTimer
+
+                    // Completely still when idle (frame 0, scale 1f); puffs open only while actively dispensing
+                    val hoodFrameIndex = if (isDispensing) {
+                        when {
+                            t < 0.06f -> 1
+                            t < 0.12f -> 2
+                            t < 0.18f -> 3
+                            t < 0.24f -> 4
+                            t < 0.36f -> 5
+                            t < 0.44f -> 3
+                            t < 0.50f -> 2
+                            else -> 1
+                        }
+                    } else {
+                        0
+                    }
+
+                    val scaleFX: Float
+                    val scaleFY: Float
+                    val shakeX: Float
+                    if (isDispensing) {
+                        when {
+                            t < 0.12f -> {
+                                scaleFX = 0.96f; scaleFY = 1.05f; shakeX = 0f
                             }
-
-                            val scaleFX: Float
-                            val scaleFY: Float
-                            val shakeX: Float
-                            if (isDispensing) {
-                                when {
-                                    t < 0.14f -> {
-                                        scaleFX = 1.05f; scaleFY = 0.96f; shakeX = 0f
-                                    }
-                                    t < 0.28f -> {
-                                        scaleFX = 0.98f; scaleFY = 1.04f; shakeX = 0f
-                                    }
-                                    t < 0.46f -> {
-                                        scaleFX = 1.03f; scaleFY = 1.01f; shakeX = sin(t * 70f) * 0.9f
-                                    }
-                                    else -> {
-                                        scaleFX = 1f; scaleFY = 1f; shakeX = 0f
-                                    }
-                                }
-                            } else if (countNum > 0) {
-                                val pulse = 1f + 0.02f * sin(t * 3.2f + c * 0.9f)
-                                scaleFX = pulse
-                                scaleFY = pulse
-                                shakeX = 0f
-                            } else {
-                                scaleFX = 0.96f; scaleFY = 0.96f; shakeX = 0f
+                            t < 0.36f -> {
+                                scaleFX = 1.08f; scaleFY = 0.99f; shakeX = 0f
                             }
-
-                            // Anchored flush with crate baseline while preserving lush crystal cave proportions
-                            val dispW = 43.5f * scaleFX
-                            val dispH = 33f * scaleFY
-                            val dispCy = cy + 1.2f
-                            val dispRect = RectF(
-                                cx + shakeX - dispW / 2f,
-                                dispCy - dispH / 2f,
-                                cx + shakeX + dispW / 2f,
-                                dispCy + dispH / 2f
-                            )
-
-                            if (isDispensing && t in 0.06f..0.44f) {
-                                val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                                    color = android.graphics.Color.parseColor("#5538BDF8")
-                                }
-                                canvas.drawOval(
-                                    RectF(dispRect.left - 3f, dispRect.top - 1f, dispRect.right + 3f, dispRect.bottom + 3f),
-                                    glowPaint
-                                )
+                            t < 0.48f -> {
+                                scaleFX = 1.03f; scaleFY = 0.99f; shakeX = sin(t * 60f) * 0.6f
                             }
-
-                            val dispBmp = AssetLoader.getCrystalCaveFrame(context, cell.direction, cavePhase)
-                            if (dispBmp != null) {
-                                val alphaPaint = if (countNum <= 0 && !isDispensing) {
-                                    Paint(Paint.ANTI_ALIAS_FLAG).apply { alpha = 175 }
-                                } else null
-                                canvas.drawBitmap(dispBmp, null, dispRect, alphaPaint)
-                            }
-
-                            // Colored tray emerging smoothly out of the cave mouth along its facing direction
-                            if (isDispensing && t in 0.18f..0.44f) {
-                                val emergingColor = cell.color ?: cell.queue.firstOrNull() ?: MarbleColor.PURPLE
-                                val trayBmp = AssetLoader.getDispenserTray(context, emergingColor)
-                                if (trayBmp != null) {
-                                    val slide = ((t - 0.18f) / 0.26f).coerceIn(0f, 1f)
-                                    val trayW = 22f + 10f * slide
-                                    val trayH = 20f + 10f * slide
-                                    val trayX = when (cell.direction) {
-                                        DispenserDirection.DOWN -> cx
-                                        DispenserDirection.RIGHT -> cx + 6f + slide * 14f
-                                        DispenserDirection.LEFT -> cx - 6f - slide * 14f
-                                    }
-                                    val trayY = when (cell.direction) {
-                                        DispenserDirection.DOWN -> cy + 6f + slide * 13f
-                                        DispenserDirection.RIGHT, DispenserDirection.LEFT -> cy + 3f
-                                    }
-                                    canvas.drawBitmap(
-                                        trayBmp,
-                                        null,
-                                        RectF(trayX - trayW / 2f, trayY - trayH / 2f, trayX + trayW / 2f, trayY + trayH / 2f),
-                                        null
-                                    )
-                                }
-                            }
-
-                            // Counter badge upright over the rock crown without covering the portal arch
-                            if (countNum > 0) {
-                                val badgeCx = when (cell.direction) {
-                                    DispenserDirection.DOWN -> cx
-                                    DispenserDirection.RIGHT -> cx - 5f
-                                    DispenserDirection.LEFT -> cx + 5f
-                                }
-                                val badgeCy = when (cell.direction) {
-                                    DispenserDirection.DOWN -> cy - 11f
-                                    DispenserDirection.RIGHT, DispenserDirection.LEFT -> cy - 10f
-                                }
-                                val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                                    color = android.graphics.Color.parseColor("#E61A0E38")
-                                    style = Paint.Style.FILL
-                                }
-                                val badgeStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                                    color = android.graphics.Color.parseColor("#F5D061")
-                                    style = Paint.Style.STROKE
-                                    strokeWidth = 1.2f
-                                }
-                                val badgeRect = RectF(badgeCx - 8.2f, badgeCy - 5.8f, badgeCx + 8.2f, badgeCy + 5.8f)
-                                canvas.drawRoundRect(badgeRect, 5f, 5f, badgePaint)
-                                canvas.drawRoundRect(badgeRect, 5f, 5f, badgeStroke)
-                                textPaint.textSize = 9.8f
-                                textPaint.color = android.graphics.Color.WHITE
-                                canvas.drawText("$countNum", badgeCx, badgeCy + 3.1f, textPaint)
+                            else -> {
+                                scaleFX = 1f; scaleFY = 1f; shakeX = 0f
                             }
                         }
+                    } else if (countNum > 0) {
+                        scaleFX = 1f; scaleFY = 1f; shakeX = 0f
+                    } else {
+                        scaleFX = 0.95f; scaleFY = 0.95f; shakeX = 0f
+                    }
 
-                        else -> {}
+                    val dispW = 47f * scaleFX
+                    val dispH = 44f * scaleFY
+                    val dispCy = cy - 6.5f
+                    val dispRect = RectF(
+                        cx + shakeX - dispW / 2f,
+                        dispCy - dispH / 2f,
+                        cx + shakeX + dispW / 2f,
+                        dispCy + dispH / 2f
+                    )
+
+                    if (isDispensing && t in 0.06f..0.44f) {
+                        val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = android.graphics.Color.parseColor("#5538BDF8")
+                        }
+                        canvas.drawOval(
+                            RectF(cx - 16f, dispCy - 12f, cx + 16f, dispCy + 18f),
+                            glowPaint
+                        )
+                    }
+
+                    val dispBmp = AssetLoader.getDispenserHoodFrame(context, hoodFrameIndex)
+                        ?: AssetLoader.getCrystalCaveFrame(context, cell.direction, "idle")
+                    if (dispBmp != null) {
+                        val dispPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                            isDither = true
+                            alpha = if (countNum <= 0 && !isDispensing) 175 else 255
+                        }
+                        val dirAngle = when (cell.direction) {
+                            DispenserDirection.DOWN -> 0f
+                            DispenserDirection.RIGHT -> -90f
+                            DispenserDirection.LEFT -> 90f
+                        }
+                        canvas.save()
+                        if (dirAngle != 0f) {
+                            canvas.rotate(dirAngle, cx, cy)
+                        }
+                        canvas.drawBitmap(dispBmp, null, dispRect, dispPaint)
+                        canvas.restore()
+                    }
+
+                    // Bold outlined counter digit centered on the blue dome
+                    if (countNum > 0) {
+                        val badgeCx = when (cell.direction) {
+                            DispenserDirection.DOWN -> cx + shakeX
+                            DispenserDirection.RIGHT -> cx - 4.0f
+                            DispenserDirection.LEFT -> cx + 4.0f
+                        }
+                        val badgeCy = when (cell.direction) {
+                            DispenserDirection.DOWN -> cy + 0.5f
+                            DispenserDirection.RIGHT, DispenserDirection.LEFT -> cy + 4.5f
+                        }
+                        val countOutlinePaint = Paint(textPaint).apply {
+                            textSize = 13.5f
+                            style = Paint.Style.STROKE
+                            strokeWidth = 3.2f
+                            strokeJoin = Paint.Join.ROUND
+                            color = android.graphics.Color.parseColor("#FF0B1528")
+                        }
+                        val countFillPaint = Paint(textPaint).apply {
+                            textSize = 13.5f
+                            style = Paint.Style.FILL
+                            color = android.graphics.Color.WHITE
+                        }
+                        canvas.drawText("$countNum", badgeCx, badgeCy, countOutlinePaint)
+                        canvas.drawText("$countNum", badgeCx, badgeCy, countFillPaint)
+                    }
+                }
+            }
+
+            // Connected-pair dual-color pill bridge overlay
+            fun linkPillArgb(cell: GridCell): Int {
+                return if (cell.isMystery) {
+                    android.graphics.Color.parseColor("#7A8B99")
+                } else {
+                    GameConstants.COLOR_MAP[cell.color ?: MarbleColor.PURPLE]?.hex?.toArgb()
+                        ?: android.graphics.Color.WHITE
+                }
+            }
+            val pillWhitePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                style = Paint.Style.FILL
+            }
+            val pillOutlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.parseColor("#44000000")
+                style = Paint.Style.STROKE
+                strokeWidth = 0.8f
+            }
+            val pillHalfPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+            }
+            val pillDividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                strokeWidth = 1.0f
+            }
+            for (r in 0 until GameConstants.GRID_ROWS) {
+                for (c in 0 until GameConstants.GRID_COLS) {
+                    val cell = grid[r][c]
+                    val group = cell.linkGroup ?: continue
+                    if (!isCrateRenderable(cell)) continue
+                    val cx = GameConstants.GRID_X_CENTERS[c] + cell.offsetX
+                    val cy = GameConstants.GRID_Y_CENTERS[r] + cell.offsetY
+
+                    if (c + 1 < GameConstants.GRID_COLS) {
+                        val right = grid[r][c + 1]
+                        if (right.linkGroup == group && isCrateRenderable(right)) {
+                            val mx = (cx + GameConstants.GRID_X_CENTERS[c + 1] + right.offsetX) * 0.5f
+                            val my = (cy + GameConstants.GRID_Y_CENTERS[r] + right.offsetY) * 0.5f
+                            val outer = RectF(mx - 5.4f, my - 3.7f, mx + 5.4f, my + 3.7f)
+                            val inner = RectF(mx - 4.3f, my - 2.6f, mx + 4.3f, my + 2.6f)
+                            canvas.drawRoundRect(outer, 3.7f, 3.7f, pillWhitePaint)
+                            canvas.drawRoundRect(outer, 3.7f, 3.7f, pillOutlinePaint)
+                            val innerPath = Path().apply { addRoundRect(inner, 2.6f, 2.6f, Path.Direction.CW) }
+                            canvas.save()
+                            canvas.clipPath(innerPath)
+                            pillHalfPaint.color = linkPillArgb(cell)
+                            canvas.drawRect(inner.left, inner.top, mx, inner.bottom, pillHalfPaint)
+                            pillHalfPaint.color = linkPillArgb(right)
+                            canvas.drawRect(mx, inner.top, inner.right, inner.bottom, pillHalfPaint)
+                            canvas.drawLine(mx, inner.top, mx, inner.bottom, pillDividerPaint)
+                            canvas.restore()
+                        }
+                    }
+
+                    if (r + 1 < GameConstants.GRID_ROWS) {
+                        val below = grid[r + 1][c]
+                        if (below.linkGroup == group && isCrateRenderable(below)) {
+                            val mx = (cx + GameConstants.GRID_X_CENTERS[c] + below.offsetX) * 0.5f
+                            val my = (cy + GameConstants.GRID_Y_CENTERS[r + 1] + below.offsetY) * 0.5f
+                            val outer = RectF(mx - 4.1f, my - 4.9f, mx + 4.1f, my + 4.9f)
+                            val inner = RectF(mx - 3.0f, my - 3.8f, mx + 3.0f, my + 3.8f)
+                            canvas.drawRoundRect(outer, 4.1f, 4.1f, pillWhitePaint)
+                            canvas.drawRoundRect(outer, 4.1f, 4.1f, pillOutlinePaint)
+                            val innerPath = Path().apply { addRoundRect(inner, 3.0f, 3.0f, Path.Direction.CW) }
+                            canvas.save()
+                            canvas.clipPath(innerPath)
+                            pillHalfPaint.color = linkPillArgb(cell)
+                            canvas.drawRect(inner.left, inner.top, inner.right, my, pillHalfPaint)
+                            pillHalfPaint.color = linkPillArgb(below)
+                            canvas.drawRect(inner.left, my, inner.right, inner.bottom, pillHalfPaint)
+                            canvas.drawLine(inner.left, my, inner.right, my, pillDividerPaint)
+                            canvas.restore()
+                        }
                     }
                 }
             }
@@ -1709,17 +1937,16 @@ fun GameBoardScreen(
 
                     // Show peeking Fluffies inside behind-buckets if Cannon Booster filled them!
                     if (queuedBrick.filled > 0 && queuedBrick.animState != "vanish") {
-                        val holeOffsets = floatArrayOf(-11.5f * stackScale, 0f, 11.5f * stackScale)
-                        val countFilled = minOf(queuedBrick.filled, 3)
-                        for (h in 0 until countFilled) {
-                            val qFluffy = AssetLoader.getFluffy(context, queuedBrick.color, "content")
-                            if (qFluffy != null) {
-                                val fx = col.x + holeOffsets[h]
-                                val fy = GameConstants.BALTI_SOCKET_Y + stackOffsetY - 2.5f * stackScale
-                                val fr = 7.2f * stackScale
-                                canvas.drawBitmap(qFluffy, null, RectF(fx - fr, fy - fr, fx + fr, fy + fr), dimPaint)
-                            }
-                        }
+                        BucketFluffyRenderer.drawPeekingFluffies(
+                            canvas = canvas,
+                            context = context,
+                            color = queuedBrick.color,
+                            centerX = col.x,
+                            bucketCenterY = GameConstants.BALTI_SOCKET_Y + stackOffsetY,
+                            baltiSize = qW,
+                            filledCount = queuedBrick.filled,
+                            alpha = (dimPaint.alpha + 40).coerceIn(0, 235)
+                        )
                     }
                 }
 
@@ -1754,26 +1981,26 @@ fun GameBoardScreen(
                     }
                 }
 
-                // Cute Fluffies peeking comfortably inside bucket with opening and closing eyes
+                // Cute Fluffies peeking comfortably inside bucket with illuminated contrast & blinking eyes
                 if (frontBrick.filled > 0 && frontBrick.animState != "vanish") {
-                    val holeOffsets = floatArrayOf(-11.5f, 0f, 11.5f)
-                    val countFilled = minOf(frontBrick.filled, 3)
-                    for (h in 0 until countFilled) {
-                        val blinkCycle = ((System.currentTimeMillis() / 1000f) + h * 0.6f + col.x * 0.05f) % 2.8f
-                        val inBucketMood = if (blinkCycle < 0.45f) "eyes_closed" else if (blinkCycle in 1.4f..1.7f) "wink" else "content"
-                        val inBucketFluffy = AssetLoader.getFluffy(context, frontBrick.color, inBucketMood)
-                        if (inBucketFluffy != null) {
-                            val fx = col.x + holeOffsets[h]
-                            val fy = GameConstants.BALTI_SOCKET_Y - 2.5f
-                            val fr = 7.5f
-                            canvas.drawBitmap(
-                                inBucketFluffy,
-                                null,
-                                RectF(fx - fr, fy - fr, fx + fr, fy + fr),
-                                null
-                            )
+                    BucketFluffyRenderer.drawPeekingFluffies(
+                        canvas = canvas,
+                        context = context,
+                        color = frontBrick.color,
+                        centerX = col.x,
+                        bucketCenterY = GameConstants.BALTI_SOCKET_Y,
+                        baltiSize = baltiW,
+                        filledCount = frontBrick.filled,
+                        alpha = 255,
+                        moodProvider = { h ->
+                            val blinkCycle = ((System.currentTimeMillis() / 1000f) + h * 0.6f + col.x * 0.05f) % 2.8f
+                            when {
+                                blinkCycle < 0.45f -> "eyes_closed"
+                                blinkCycle in 1.4f..1.7f -> "wink"
+                                else -> "content"
+                            }
                         }
-                    }
+                    )
                 }
 
                 // C. Remaining Queue Badge Indicator below the bucket
@@ -2841,13 +3068,15 @@ fun GameBoardScreen(
         ) {
             // Pause button (top-left)
             if (pauseNormalBitmap != null) {
+                val pausePress = rememberBouncyPressState(pressedScale = 0.86f)
                 Image(
                     bitmap = pauseNormalBitmap.asImageBitmap(),
                     contentDescription = "Pause",
                     modifier = Modifier
                         .size(52.dp, 56.dp)
+                        .bouncyScale(pausePress)
                         .testTag("pause_button")
-                        .clickable {
+                        .bouncyClickTarget(pausePress) {
                             SoundManager.playTap()
                             isPaused = true
                         }
@@ -2955,6 +3184,7 @@ private fun PauseMenuDialog(
             }
 
             if (closeBmp != null) {
+                val closePress = rememberBouncyPressState(pressedScale = 0.85f)
                 Image(
                     bitmap = closeBmp.asImageBitmap(),
                     contentDescription = "Close",
@@ -2962,7 +3192,8 @@ private fun PauseMenuDialog(
                         .align(Alignment.TopEnd)
                         .padding(top = 18.dp, end = 20.dp)
                         .size(32.dp)
-                        .clickable { onDismiss() }
+                        .bouncyScale(closePress)
+                        .bouncyClickTarget(closePress) { onDismiss() }
                 )
             }
 
@@ -2973,46 +3204,54 @@ private fun PauseMenuDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 if (resumeBmp != null) {
+                    val resumePress = rememberBouncyPressState(pressedScale = 0.88f)
                     Image(
                         bitmap = resumeBmp.asImageBitmap(),
                         contentDescription = "Resume",
                         modifier = Modifier
                             .width(170.dp)
                             .height(44.dp)
-                            .clickable { onDismiss() }
+                            .bouncyScale(resumePress)
+                            .bouncyClickTarget(resumePress) { onDismiss() }
                     )
                 }
 
                 if (restartBmp != null) {
+                    val restartPress = rememberBouncyPressState(pressedScale = 0.88f)
                     Image(
                         bitmap = restartBmp.asImageBitmap(),
                         contentDescription = "Restart",
                         modifier = Modifier
                             .width(170.dp)
                             .height(44.dp)
-                            .clickable { onRestart() }
+                            .bouncyScale(restartPress)
+                            .bouncyClickTarget(restartPress) { onRestart() }
                     )
                 }
 
                 if (soundBmp != null) {
+                    val soundPress = rememberBouncyPressState(pressedScale = 0.88f)
                     Image(
                         bitmap = soundBmp.asImageBitmap(),
                         contentDescription = "Sound",
                         modifier = Modifier
                             .width(170.dp)
                             .height(44.dp)
-                            .clickable { onToggleSound() }
+                            .bouncyScale(soundPress)
+                            .bouncyClickTarget(soundPress) { onToggleSound() }
                     )
                 }
 
                 if (homeBmp != null) {
+                    val homePress = rememberBouncyPressState(pressedScale = 0.88f)
                     Image(
                         bitmap = homeBmp.asImageBitmap(),
                         contentDescription = "Home",
                         modifier = Modifier
                             .width(170.dp)
                             .height(44.dp)
-                            .clickable { onHome() }
+                            .bouncyScale(homePress)
+                            .bouncyClickTarget(homePress) { onHome() }
                     )
                 }
             }

@@ -74,6 +74,10 @@ import com.example.game.story.StoryBeat
 import com.example.game.story.StoryEpisode
 import com.example.game.story.StorySfxCue
 import com.example.game.story.StoryStageChoreography
+import com.example.ui.components.GreenPlayPillButton
+import com.example.ui.components.bouncyClickTarget
+import com.example.ui.components.bouncyScale
+import com.example.ui.components.rememberBouncyPressState
 import com.example.ui.theme.FredokaFontFamily
 import kotlinx.coroutines.delay
 import kotlin.math.PI
@@ -211,9 +215,6 @@ fun StoryCutsceneScreen(
     val assetBackdrop = remember(episode.backdrop) {
         episode.backdrop.assetPath?.let { AssetLoader.loadBitmap(context, it) }
     }
-    val btnLevelGreen = remember {
-        AssetLoader.loadBitmap(context, "profile/btn_level_green.png")
-    }
 
     Box(
         modifier = Modifier
@@ -330,13 +331,15 @@ fun StoryCutsceneScreen(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val skipPress = rememberBouncyPressState(pressedScale = 0.88f)
                 Box(
                     modifier = Modifier
+                        .bouncyScale(skipPress)
                         .height(48.dp)
                         .clip(RoundedCornerShape(24.dp))
                         .background(Color(0xCC0B2B66))
                         .border(2.dp, Color(0xFF7CE7FF), RoundedCornerShape(24.dp))
-                        .clickable {
+                        .bouncyClickTarget(skipPress) {
                             SoundManager.stopStorySfx()
                             SoundManager.playTap()
                             onComplete()
@@ -456,9 +459,11 @@ fun StoryCutsceneScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (!isLastBeat) {
+                        val nextPress = rememberBouncyPressState(pressedScale = 0.90f)
                         Box(
                             modifier = Modifier
                                 .weight(1f)
+                                .bouncyScale(nextPress)
                                 .height(52.dp)
                                 .clip(RoundedCornerShape(26.dp))
                                 .background(
@@ -467,7 +472,7 @@ fun StoryCutsceneScreen(
                                     )
                                 )
                                 .border(2.dp, Color(0xFFBAE6FD), RoundedCornerShape(26.dp))
-                                .clickable {
+                                .bouncyClickTarget(nextPress) {
                                     SoundManager.stopStorySfx()
                                     SoundManager.playTap()
                                     beatIndex++
@@ -485,69 +490,26 @@ fun StoryCutsceneScreen(
                             )
                         }
                     } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.8f)
-                                .widthIn(max = 340.dp)
-                                .height(82.dp)
-                                .testTag("story_start_button")
-                                .clickable {
-                                    SoundManager.stopStorySfx()
-                                    SoundManager.playPowerup()
-                                    onComplete()
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (btnLevelGreen != null) {
-                                Image(
-                                    bitmap = btnLevelGreen.asImageBitmap(),
-                                    contentDescription = if (episode.isFinaleEpilogue) {
-                                        "Back Home"
-                                    } else {
-                                        "Play Level $levelToStart"
-                                    },
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(RoundedCornerShape(41.dp))
-                                        .background(
-                                            Brush.verticalGradient(
-                                                listOf(Color(0xFF4ADE80), Color(0xFF22C55E), Color(0xFF15803D))
-                                            )
-                                        )
-                                        .border(3.dp, Color(0xFFFFD700), RoundedCornerShape(41.dp))
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = if (episode.isFinaleEpilogue) {
-                                        "BACK HOME"
-                                    } else {
-                                        "LEVEL $levelToStart"
-                                    },
-                                    fontFamily = FredokaFontFamily,
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 28.sp,
-                                    color = Color.White,
-                                    letterSpacing = 2.sp
-                                )
-                                Text(
-                                    text = if (episode.isFinaleEpilogue) {
-                                        "ISLAND COMPLETE!"
-                                    } else {
-                                        "TAP TO PLAY"
-                                    },
-                                    fontFamily = FredokaFontFamily,
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 12.sp,
-                                    color = Color(0xFFFFE27D),
-                                    letterSpacing = 1.sp
-                                )
-                            }
+                        val startLabel = if (episode.isFinaleEpilogue) {
+                            "BACK HOME"
+                        } else {
+                            "LEVEL $levelToStart"
                         }
+                        val startDesc = if (episode.isFinaleEpilogue) {
+                            "Back Home"
+                        } else {
+                            "Play Level $levelToStart"
+                        }
+                        GreenPlayPillButton(
+                            text = startLabel,
+                            contentDescription = startDesc,
+                            testTag = "story_start_button",
+                            onClick = {
+                                SoundManager.stopStorySfx()
+                                SoundManager.playPowerup()
+                                onComplete()
+                            }
+                        )
                     }
                 }
             }

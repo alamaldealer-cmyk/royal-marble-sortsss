@@ -1750,6 +1750,533 @@ object LevelGenerator {
         return LevelData(30, grid, columns, GameConstants.BALLS_PER_BLOCK)
     }
 
+    fun getLevel41(): LevelData {
+        val grid = newWallGrid()
+        // U-topped 4-column chamber (r=1..5, c=1..4) introducing connected pairs (linkGroups 1..4)
+        grid[1][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE, linkGroup = 1)
+        grid[1][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED, linkGroup = 2)
+
+        grid[2][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE, linkGroup = 1)
+        grid[2][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[2][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME)
+        grid[2][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW, linkGroup = 2)
+
+        grid[3][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW)
+        grid[3][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[3][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[3][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+
+        grid[4][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE, linkGroup = 3)
+        grid[4][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE, linkGroup = 3)
+        grid[4][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE, linkGroup = 4)
+        grid[4][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME, linkGroup = 4)
+
+        grid[5][1] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.CYAN)
+        grid[5][2] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.PURPLE)
+        grid[5][3] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.LIME)
+        grid[5][4] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.ORANGE)
+
+        val columns = buildBalancedColumns(
+            grid = grid,
+            exactFrontRow = listOf(MarbleColor.LIME, MarbleColor.ORANGE, MarbleColor.ORANGE, MarbleColor.BLUE),
+            seed = 4141L
+        )
+        return LevelData(41, grid, columns, GameConstants.BALLS_PER_BLOCK)
+    }
+
+    fun getLevel42(): LevelData {
+        val grid = newWallGrid()
+        // Asymmetric 5-column (c=1..5) staircase layout with 5 connected pairs (linkGroups 1..5)
+        grid[0][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.DARK_GREEN)
+        grid[0][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE, linkGroup = 1)
+
+        grid[1][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+        grid[1][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLACK, linkGroup = 1)
+        grid[1][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE)
+        grid[1][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE, linkGroup = 2)
+
+        grid[2][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE, linkGroup = 3)
+        grid[2][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.DARK_GREEN, linkGroup = 3)
+        grid[2][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE)
+        grid[2][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLACK, linkGroup = 2)
+        grid[2][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+
+        // grid[3][1] remains WALL notch
+        grid[3][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+        grid[3][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+        grid[3][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK, linkGroup = 4)
+        grid[3][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW, linkGroup = 4)
+
+        grid[4][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+        grid[4][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN, linkGroup = 5)
+        grid[4][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLACK, linkGroup = 5)
+        grid[4][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+        grid[4][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK)
+
+        grid[5][1] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.DARK_GREEN)
+        grid[5][2] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.DARK_GREEN)
+        grid[5][3] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.BLACK)
+        grid[5][4] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.LIGHT_PINK)
+
+        val columns = buildBalancedColumns(
+            grid = grid,
+            exactFrontRow = listOf(MarbleColor.LIGHT_PINK, MarbleColor.ORANGE, MarbleColor.LIGHT_PINK, MarbleColor.CYAN),
+            seed = 4242L
+        )
+        return LevelData(42, grid, columns, GameConstants.BALLS_PER_BLOCK)
+    }
+
+    fun getLevel43(): LevelData {
+        val grid = newWallGrid()
+        // Stepped 6-col layout with 2 Dispensers(3) at (0,2),(1,5) & 4 connected pairs (including bottom row (5,2)-(5,3))
+        grid[0][2] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.PURPLE, MarbleColor.LIGHT_PINK, MarbleColor.YELLOW)
+        )
+        grid[0][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+        grid[0][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.DARK_GREEN, linkGroup = 1)
+
+        grid[1][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW)
+        grid[1][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[1][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK)
+        grid[1][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME, linkGroup = 1)
+        grid[1][5] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.CYAN, MarbleColor.WHITE, MarbleColor.RED)
+        )
+
+        grid[2][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK, linkGroup = 2)
+        grid[2][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+        grid[2][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.DARK_GREEN)
+        grid[2][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ICE)
+        grid[2][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+
+        grid[3][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+        grid[3][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME, linkGroup = 2)
+        grid[3][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+        grid[3][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME, linkGroup = 3)
+        grid[3][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.DARK_GREEN, linkGroup = 3)
+        grid[3][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW)
+
+        grid[4][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.WHITE)
+        grid[4][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.DARK_GREEN)
+        grid[4][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK)
+        grid[4][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+        grid[4][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[4][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+
+        grid[5][1] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.WHITE)
+        grid[5][2] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.BROWN, linkGroup = 4)
+        grid[5][3] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.RED, linkGroup = 4)
+        grid[5][4] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.YELLOW)
+
+        val columns = buildBalancedColumns(
+            grid = grid,
+            exactFrontRow = listOf(MarbleColor.YELLOW, MarbleColor.LIGHT_PINK, MarbleColor.WHITE, MarbleColor.ICE),
+            seed = 4343L
+        )
+        return LevelData(43, grid, columns, GameConstants.BALLS_PER_BLOCK)
+    }
+
+    fun getLevel44(): LevelData {
+        val grid = newWallGrid()
+        // 6-row grid with 2 Dispensers(3) at (1,0),(2,5), 5 vertical connected pairs & mystery crates (incl. (5,3))
+        grid[0][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED, linkGroup = 1)
+        grid[0][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.WHITE)
+
+        grid[1][0] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.LIME, MarbleColor.ORANGE, MarbleColor.WHITE)
+        )
+        grid[1][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED, isMystery = true, linkGroup = 1)
+        grid[1][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.WHITE, isMystery = true)
+        grid[1][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME)
+        grid[1][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE, isMystery = true, linkGroup = 2)
+
+        grid[2][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.WHITE)
+        grid[2][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[2][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE, linkGroup = 3)
+        grid[2][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[2][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE, isMystery = true, linkGroup = 2)
+        grid[2][5] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.PURPLE, MarbleColor.BLUE, MarbleColor.RED)
+        )
+
+        grid[3][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[3][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE, linkGroup = 4)
+        grid[3][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE, linkGroup = 3)
+        grid[3][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE, linkGroup = 5)
+        grid[3][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.WHITE)
+        grid[3][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME)
+
+        grid[4][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE)
+        grid[4][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED, linkGroup = 4)
+        grid[4][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME)
+        grid[4][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE, isMystery = true, linkGroup = 5)
+        grid[4][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE)
+        grid[4][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE)
+
+        grid[5][1] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.WHITE)
+        grid[5][2] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.LIME)
+        grid[5][3] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.RED, isMystery = true)
+        grid[5][4] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.ORANGE)
+
+        val columns = buildBalancedColumns(
+            grid = grid,
+            exactFrontRow = listOf(MarbleColor.WHITE, MarbleColor.ORANGE, MarbleColor.PURPLE, MarbleColor.WHITE),
+            seed = 4444L
+        )
+        return LevelData(44, grid, columns, GameConstants.BALLS_PER_BLOCK)
+    }
+
+    fun getLevel45(): LevelData {
+        val grid = newWallGrid()
+        // 6-col chamber with 3 Dispensers(3) at (1,0),(1,4),(3,2) & 4 horizontal connected pairs
+        grid[0][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN, linkGroup = 1)
+        grid[0][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE, linkGroup = 1)
+
+        grid[1][0] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.LIGHT_PINK, MarbleColor.RED, MarbleColor.BLUE)
+        )
+        grid[1][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.DARK_GREEN)
+        grid[1][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE)
+        grid[1][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[1][4] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.PURPLE, MarbleColor.RED, MarbleColor.LIGHT_PINK)
+        )
+
+        grid[2][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE)
+        grid[2][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+        grid[2][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK)
+        grid[2][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE)
+        grid[2][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED, linkGroup = 2)
+        grid[2][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK, linkGroup = 2)
+
+        grid[3][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[3][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE)
+        grid[3][2] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.ORANGE, MarbleColor.DARK_GREEN, MarbleColor.CYAN)
+        )
+        grid[3][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+        grid[3][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[3][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE)
+
+        grid[4][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+        grid[4][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN, linkGroup = 3)
+        grid[4][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE, linkGroup = 3)
+        grid[4][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN, linkGroup = 4)
+        grid[4][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.DARK_GREEN, linkGroup = 4)
+        grid[4][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+
+        grid[5][0] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.CYAN)
+        grid[5][1] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.CYAN)
+        grid[5][2] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.LIGHT_PINK)
+        grid[5][3] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.RED)
+        grid[5][4] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.LIGHT_PINK)
+        grid[5][5] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.ORANGE)
+
+        val columns = buildBalancedColumns(
+            grid = grid,
+            exactFrontRow = listOf(MarbleColor.DARK_GREEN, MarbleColor.DARK_GREEN, MarbleColor.PURPLE, MarbleColor.DARK_GREEN),
+            seed = 4545L
+        )
+        return LevelData(45, grid, columns, GameConstants.BALLS_PER_BLOCK)
+    }
+
+    fun getLevel46(): LevelData {
+        val grid = newWallGrid()
+        // 6-col brown temple with 1x2 vertical stone pillar at (2,1)-(3,1) & twin Dispensers(3) at (2,2),(2,3)
+        grid[0][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.WHITE)
+        grid[0][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE)
+        grid[0][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[0][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLACK)
+
+        grid[1][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.WHITE)
+        grid[1][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK)
+        grid[1][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE)
+        grid[1][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME)
+        grid[1][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+        grid[1][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK)
+
+        grid[2][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        // grid[2][1] & grid[3][1] remain WALL vertical stone pillar
+        grid[2][2] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.RED, MarbleColor.BLACK, MarbleColor.PURPLE)
+        )
+        grid[2][3] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.ORANGE, MarbleColor.BLACK, MarbleColor.RED)
+        )
+        grid[2][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK)
+        grid[2][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+
+        grid[3][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+        grid[3][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+        grid[3][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW)
+        grid[3][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME)
+        grid[3][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW)
+
+        grid[4][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK)
+        grid[4][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[4][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLACK)
+        grid[4][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[4][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[4][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+
+        grid[5][0] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.BLACK)
+        grid[5][1] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.LIME)
+        grid[5][2] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.ORANGE)
+        grid[5][3] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.ORANGE)
+        grid[5][4] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.PURPLE)
+        grid[5][5] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.BLACK)
+
+        val columns = buildBalancedColumns(
+            grid = grid,
+            exactFrontRow = listOf(MarbleColor.LIGHT_PINK, MarbleColor.PURPLE, MarbleColor.ORANGE, MarbleColor.LIME),
+            seed = 4646L
+        )
+        return LevelData(46, grid, columns, GameConstants.BALLS_PER_BLOCK)
+    }
+
+    fun getLevel47(): LevelData {
+        val grid = newWallGrid()
+        // Horizontal 2x1 stone beam at (2,2)-(2,3), twin Dispensers(3) at (3,2),(3,3) & 12 mystery crates
+        grid[0][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.DARK_GREEN, isMystery = true)
+        grid[0][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN, isMystery = true)
+        grid[0][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW, isMystery = true)
+        grid[0][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED, isMystery = true)
+
+        grid[1][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+        grid[1][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[1][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW)
+        grid[1][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.DARK_GREEN)
+        grid[1][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW)
+        grid[1][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLACK)
+
+        grid[2][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN, isMystery = true)
+        grid[2][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.WHITE, isMystery = true)
+        // grid[2][2] & grid[2][3] remain WALL horizontal stone beam
+        grid[2][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE, isMystery = true)
+        grid[2][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.DARK_GREEN, isMystery = true)
+
+        grid[3][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE, isMystery = true)
+        grid[3][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN, isMystery = true)
+        grid[3][2] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.RED, MarbleColor.YELLOW, MarbleColor.DARK_GREEN)
+        )
+        grid[3][3] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.BLACK, MarbleColor.PURPLE, MarbleColor.CYAN)
+        )
+        grid[3][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN, isMystery = true)
+        grid[3][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED, isMystery = true)
+
+        grid[4][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[4][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+        grid[4][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[4][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+        grid[4][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.WHITE)
+
+        grid[5][1] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.PURPLE)
+        grid[5][2] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.BLACK)
+        grid[5][3] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.BROWN)
+        grid[5][4] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.DARK_GREEN)
+
+        val columns = buildBalancedColumns(
+            grid = grid,
+            exactFrontRow = listOf(MarbleColor.BLACK, MarbleColor.BLACK, MarbleColor.RED, MarbleColor.DARK_GREEN),
+            seed = 4747L
+        )
+        return LevelData(47, grid, columns, GameConstants.BALLS_PER_BLOCK)
+    }
+
+    fun getLevel48(): LevelData {
+        val grid = newWallGrid()
+        // Split-tower twin wings flanking 2x3 center WALL (0..2, 2..3) & twin Dispensers(4) at (3,2),(3,3)
+        grid[0][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED, isMystery = true)
+        grid[0][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE)
+        grid[0][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME)
+        grid[0][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE, isMystery = true)
+
+        grid[1][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE)
+        grid[1][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK, isMystery = true)
+        grid[1][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN, isMystery = true)
+        grid[1][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW)
+
+        grid[2][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE, isMystery = true)
+        grid[2][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW)
+        grid[2][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME)
+        grid[2][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED, isMystery = true)
+
+        grid[3][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK, isMystery = true)
+        grid[3][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE, isMystery = true)
+        grid[3][2] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 4,
+            queue = mutableListOf(MarbleColor.RED, MarbleColor.BLUE, MarbleColor.CYAN, MarbleColor.ORANGE)
+        )
+        grid[3][3] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 4,
+            queue = mutableListOf(MarbleColor.LIGHT_PINK, MarbleColor.CYAN, MarbleColor.PURPLE, MarbleColor.RED)
+        )
+        grid[3][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED, isMystery = true)
+        grid[3][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE, isMystery = true)
+
+        grid[4][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+        grid[4][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK)
+        grid[4][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE)
+        grid[4][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+        grid[4][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[4][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+
+        grid[5][1] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.LIGHT_PINK)
+        grid[5][2] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.ORANGE)
+        grid[5][3] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.LIME)
+        grid[5][4] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.RED)
+
+        val columns = buildBalancedColumns(
+            grid = grid,
+            exactFrontRow = listOf(MarbleColor.PURPLE, MarbleColor.RED, MarbleColor.LIGHT_PINK, MarbleColor.RED),
+            seed = 4848L
+        )
+        return LevelData(48, grid, columns, GameConstants.BALLS_PER_BLOCK)
+    }
+
+    fun getLevel49(): LevelData {
+        val grid = newWallGrid()
+        // 6-col chamber with bottom stone notch (5,2), 2 Dispensers(3) at (1,0),(2,5) & 3 horizontal linked pairs
+        grid[0][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW, linkGroup = 1)
+        grid[0][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE, linkGroup = 1)
+        grid[0][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME)
+        grid[0][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW)
+
+        grid[1][0] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.LIME, MarbleColor.RED, MarbleColor.LIGHT_PINK)
+        )
+        grid[1][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME)
+        grid[1][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+        grid[1][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[1][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+
+        grid[2][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+        grid[2][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+        grid[2][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME, linkGroup = 2)
+        grid[2][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN, linkGroup = 2)
+        grid[2][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK)
+        grid[2][5] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.RED, MarbleColor.BROWN, MarbleColor.LIME)
+        )
+
+        grid[3][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[3][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[3][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[3][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[3][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE)
+        grid[3][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW)
+
+        grid[4][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME)
+        grid[4][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[4][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+        grid[4][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE)
+        grid[4][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIGHT_PINK, linkGroup = 3)
+        grid[4][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED, linkGroup = 3)
+
+        grid[5][0] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.YELLOW)
+        grid[5][1] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.LIGHT_PINK)
+        // grid[5][2] remains WALL center stone notch
+        grid[5][3] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.ORANGE)
+        grid[5][4] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.PURPLE)
+        grid[5][5] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.ORANGE)
+
+        val columns = buildBalancedColumns(
+            grid = grid,
+            exactFrontRow = listOf(MarbleColor.PURPLE, MarbleColor.RED, MarbleColor.LIME, MarbleColor.BROWN),
+            seed = 4949L
+        )
+        return LevelData(49, grid, columns, GameConstants.BALLS_PER_BLOCK)
+    }
+
+    fun getLevel50(): LevelData {
+        val grid = newWallGrid()
+        // 6x6 Grand Finale fortress with L-shaped stone core (2,2),(3,2),(3,3), top corner Dispensers(3) & 12 mystery crates
+        grid[0][0] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.RED, MarbleColor.CYAN, MarbleColor.BROWN)
+        )
+        grid[0][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME)
+        grid[0][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE, isMystery = true)
+        grid[0][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE, isMystery = true)
+        grid[0][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.DARK_GREEN)
+        grid[0][5] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 3,
+            queue = mutableListOf(MarbleColor.YELLOW, MarbleColor.ORANGE, MarbleColor.PURPLE)
+        )
+
+        grid[1][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[1][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[1][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN, isMystery = true)
+        grid[1][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN, isMystery = true)
+        grid[1][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+        grid[1][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+
+        grid[2][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.DARK_GREEN, isMystery = true)
+        grid[2][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED, isMystery = true)
+        // grid[2][2], grid[3][2], grid[3][3] remain WALL L-shaped center core
+        grid[2][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+        grid[2][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.LIME, isMystery = true)
+        grid[2][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW, isMystery = true)
+
+        grid[3][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED, isMystery = true)
+        grid[3][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BLUE, isMystery = true)
+        grid[3][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE, isMystery = true)
+        grid[3][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE, isMystery = true)
+
+        grid[4][0] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE)
+        grid[4][1] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.CYAN)
+        grid[4][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[4][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        grid[4][4] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.PURPLE)
+        grid[4][5] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.BROWN)
+
+        grid[5][0] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.BLUE)
+        grid[5][1] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.LIME)
+        grid[5][2] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.DARK_GREEN)
+        grid[5][3] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.DARK_GREEN)
+        grid[5][4] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.YELLOW)
+        grid[5][5] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.YELLOW)
+
+        val columns = buildBalancedColumns(
+            grid = grid,
+            exactFrontRow = listOf(MarbleColor.RED, MarbleColor.YELLOW, MarbleColor.BLUE, MarbleColor.ORANGE),
+            seed = 5050L
+        )
+        return LevelData(50, grid, columns, GameConstants.BALLS_PER_BLOCK)
+    }
+
     fun generateSolvableLevel(levelNum: Int): LevelData {
         return when (levelNum) {
             1 -> getLevel1()
@@ -1792,6 +2319,16 @@ object LevelGenerator {
             38 -> getLevel38()
             39 -> getLevel39()
             40 -> getLevel40()
+            41 -> getLevel41()
+            42 -> getLevel42()
+            43 -> getLevel43()
+            44 -> getLevel44()
+            45 -> getLevel45()
+            46 -> getLevel46()
+            47 -> getLevel47()
+            48 -> getLevel48()
+            49 -> getLevel49()
+            50 -> getLevel50()
             else -> generateProceduralLevel(levelNum)
         }
     }

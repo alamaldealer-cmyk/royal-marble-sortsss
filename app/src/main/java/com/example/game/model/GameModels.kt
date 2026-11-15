@@ -54,7 +54,9 @@ data class GridCell(
     var scaleY: Float = 1f,
     var offsetX: Float = 0f,
     var offsetY: Float = 0f,
-    var ballCount: Int = 9
+    var ballCount: Int = 9,
+    var linkGroup: Int? = null,
+    var fromMagnet: Boolean = false
 ) {
     fun deepCopy(): GridCell {
         return GridCell(
@@ -72,7 +74,9 @@ data class GridCell(
             scaleY = scaleY,
             offsetX = offsetX,
             offsetY = offsetY,
-            ballCount = ballCount
+            ballCount = ballCount,
+            linkGroup = linkGroup,
+            fromMagnet = fromMagnet
         )
     }
 }

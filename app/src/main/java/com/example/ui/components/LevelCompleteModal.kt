@@ -419,13 +419,15 @@ fun LevelCompleteModal(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (pauseNormalBitmap != null) {
+                val pausePress = rememberBouncyPressState(pressedScale = 0.86f)
                 Image(
                     bitmap = pauseNormalBitmap.asImageBitmap(),
                     contentDescription = "Pause",
                     modifier = Modifier
                         .size(52.dp, 56.dp)
+                        .bouncyScale(pausePress)
                         .testTag("victory_pause_button")
-                        .clickable { onPause() }
+                        .bouncyClickTarget(pausePress) { onPause() }
                 )
             } else {
                 Spacer(modifier = Modifier.size(52.dp, 56.dp))
@@ -653,16 +655,18 @@ fun LevelCompleteModal(
                 var greenBtnPos by remember { mutableStateOf(Offset.Zero) }
 
                 // Top Button: Blue Glossy Multiplied Claim Button
+                val bluePress = rememberBouncyPressState(pressedScale = 0.88f)
                 Box(
                     modifier = Modifier
                         .width(170.dp)
                         .height(48.dp)
+                        .bouncyScale(bluePress)
                         .testTag("claim_multiplied_button")
                         .onGloballyPositioned { coords ->
                             val pos = coords.positionInRoot()
                             blueBtnPos = Offset(pos.x + coords.size.width / 2f, pos.y + coords.size.height / 2f)
                         }
-                        .clickable(enabled = !isStopped) {
+                        .bouncyClickTarget(bluePress, enabled = !isStopped) {
                             val origin = if (blueBtnPos != Offset.Zero) blueBtnPos else buttonCenterInRoot
                             triggerCoinCollection(50 * activeMultiplier, origin)
                         },
@@ -688,16 +692,18 @@ fun LevelCompleteModal(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Bottom Button: Green Glossy Standard 50 Coins Button
+                val greenPress = rememberBouncyPressState(pressedScale = 0.88f)
                 Box(
                     modifier = Modifier
                         .width(170.dp)
                         .height(48.dp)
+                        .bouncyScale(greenPress)
                         .testTag("claim_base_button")
                         .onGloballyPositioned { coords ->
                             val pos = coords.positionInRoot()
                             greenBtnPos = Offset(pos.x + coords.size.width / 2f, pos.y + coords.size.height / 2f)
                         }
-                        .clickable(enabled = !isStopped) {
+                        .bouncyClickTarget(greenPress, enabled = !isStopped) {
                             val origin = if (greenBtnPos != Offset.Zero) greenBtnPos else buttonCenterInRoot
                             triggerCoinCollection(50, origin)
                         },

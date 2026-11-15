@@ -37,14 +37,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -58,8 +54,12 @@ import com.example.game.assets.AssetLoader
 import com.example.game.sound.SoundManager
 import com.example.ui.components.AnimatedGameLogo
 import com.example.ui.components.BottomNav
+import com.example.ui.components.GreenPlayPillButton
 import com.example.ui.components.NavTab
 import com.example.ui.components.UniversalCoinRack
+import com.example.ui.components.bouncyClickTarget
+import com.example.ui.components.bouncyScale
+import com.example.ui.components.rememberBouncyPressState
 import com.example.ui.theme.FredokaFontFamily
 
 data class AvatarOption(val id: String, val name: String, val assetPath: String)
@@ -112,7 +112,6 @@ fun HomeScreen(
     // Bitmaps
     val tropicalBg = remember { AssetLoader.loadBitmap(context, "tropical_beach_resort_entrance.png") }
     val coinRackBitmap = remember { AssetLoader.loadBitmap(context, "coin_rack.png") }
-    val btnPlayGreenPill = remember { AssetLoader.loadBitmap(context, "profile/btn_play_green_pill.png") }
     val goldCoinBitmap = remember { AssetLoader.loadBitmap(context, "coins/coin_01.png") }
 
     val currentAvatar = AVATAR_OPTIONS.firstOrNull { it.id == selectedAvatarId } ?: AVATAR_OPTIONS[0]
@@ -163,11 +162,13 @@ fun HomeScreen(
             ) {
                 if (activeTab == NavTab.HOME) {
                     // Profile button: Avatar + Name Pill
+                    val profilePress = rememberBouncyPressState(pressedScale = 0.90f)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
+                            .bouncyScale(profilePress)
                             .testTag("profile_button")
-                            .clickable {
+                            .bouncyClickTarget(profilePress) {
                                 SoundManager.playTap()
                                 isProfileModalOpen = true
                             }
@@ -279,67 +280,24 @@ fun HomeScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(0.64f)
-                                .widthIn(max = 250.dp)
-                                .aspectRatio(640f / 200f)
-                                .testTag("play_button")
-                                .clickable {
-                                    SoundManager.playTap()
-                                    onStartGame()
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (btnPlayGreenPill != null) {
-                                Image(
-                                    bitmap = btnPlayGreenPill.asImageBitmap(),
-                                    contentDescription = "Level $levelNumber",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.FillBounds
-                                )
+                        GreenPlayPillButton(
+                            text = "LEVEL $levelNumber",
+                            contentDescription = "Level $levelNumber",
+                            testTag = "play_button",
+                            onClick = {
+                                SoundManager.playTap()
+                                onStartGame()
                             }
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = "LEVEL $levelNumber",
-                                    maxLines = 1,
-                                    style = TextStyle(
-                                        fontFamily = FredokaFontFamily,
-                                        fontWeight = FontWeight.Black,
-                                        fontSize = 32.sp,
-                                        color = Color(0xFF034400),
-                                        letterSpacing = 1.8.sp,
-                                        drawStyle = Stroke(
-                                            width = 7f,
-                                            join = StrokeJoin.Round
-                                        ),
-                                        shadow = Shadow(
-                                            color = Color(0xAA012800),
-                                            offset = Offset(0f, 3f),
-                                            blurRadius = 4f
-                                        )
-                                    )
-                                )
-                                Text(
-                                    text = "LEVEL $levelNumber",
-                                    maxLines = 1,
-                                    style = TextStyle(
-                                        fontFamily = FredokaFontFamily,
-                                        fontWeight = FontWeight.Black,
-                                        fontSize = 32.sp,
-                                        color = Color.White,
-                                        letterSpacing = 1.8.sp
-                                    )
-                                )
-                            }
-                        }
+                        )
 
                         Spacer(modifier = Modifier.height(10.dp))
 
+                        val colorTestPress = rememberBouncyPressState(pressedScale = 0.90f)
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth(0.72f)
                                 .widthIn(max = 300.dp)
+                                .bouncyScale(colorTestPress)
                                 .height(48.dp)
                                 .shadow(6.dp, RoundedCornerShape(24.dp))
                                 .clip(RoundedCornerShape(24.dp))
@@ -353,7 +311,7 @@ fun HomeScreen(
                                     )
                                 )
                                 .border(2.5.dp, Color(0xFFFFD700), RoundedCornerShape(24.dp))
-                                .clickable {
+                                .bouncyClickTarget(colorTestPress) {
                                     SoundManager.playTap()
                                     onOpenColorTest()
                                 }
@@ -510,8 +468,10 @@ fun ShopItemCard(item: ShopItem, coinBitmap: Bitmap?, onBuy: () -> Unit) {
             )
         }
 
+        val buyPress = rememberBouncyPressState(pressedScale = 0.88f)
         Box(
             modifier = Modifier
+                .bouncyScale(buyPress)
                 .clip(RoundedCornerShape(12.dp))
                 .background(
                     Brush.verticalGradient(
@@ -519,7 +479,7 @@ fun ShopItemCard(item: ShopItem, coinBitmap: Bitmap?, onBuy: () -> Unit) {
                     )
                 )
                 .border(2.dp, Color(0xFFA8F028), RoundedCornerShape(12.dp))
-                .clickable { onBuy() }
+                .bouncyClickTarget(buyPress) { onBuy() }
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text(
@@ -596,13 +556,15 @@ fun SettingsTabContent(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     // Decrease Level Button
+                    val decPress = rememberBouncyPressState(pressedScale = 0.85f)
                     Box(
                         modifier = Modifier
                             .size(38.dp)
+                            .bouncyScale(decPress)
                             .clip(CircleShape)
                             .background(Color(0xFFE93D5A))
                             .border(1.5.dp, Color.White, CircleShape)
-                            .clickable {
+                            .bouncyClickTarget(decPress) {
                                 if (levelNumber > 1) {
                                     SoundManager.playTap()
                                     onSetLevel(levelNumber - 1)
@@ -641,13 +603,15 @@ fun SettingsTabContent(
                     Spacer(modifier = Modifier.width(16.dp))
 
                     // Increase Level Button
+                    val incPress = rememberBouncyPressState(pressedScale = 0.85f)
                     Box(
                         modifier = Modifier
                             .size(38.dp)
+                            .bouncyScale(incPress)
                             .clip(CircleShape)
                             .background(Color(0xFF2EB55A))
                             .border(1.5.dp, Color.White, CircleShape)
-                            .clickable {
+                            .bouncyClickTarget(incPress) {
                                 if (levelNumber < 100) {
                                     SoundManager.playTap()
                                     onSetLevel(levelNumber + 1)
@@ -668,12 +632,14 @@ fun SettingsTabContent(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Reset to Level 1 Button
+                val resetPress = rememberBouncyPressState(pressedScale = 0.88f)
                 Box(
                     modifier = Modifier
+                        .bouncyScale(resetPress)
                         .clip(RoundedCornerShape(10.dp))
                         .background(Color(0xFF004A80))
                         .border(1.dp, Color(0xFF00C4FF), RoundedCornerShape(10.dp))
-                        .clickable {
+                        .bouncyClickTarget(resetPress) {
                             SoundManager.playTap()
                             onSetLevel(1)
                         }
@@ -730,12 +696,14 @@ fun SettingsTabContent(
 
         // Support Button
         if (btnSupport != null) {
+            val supportPress = rememberBouncyPressState(pressedScale = 0.89f)
             Image(
                 bitmap = btnSupport.asImageBitmap(),
                 contentDescription = "Support",
                 modifier = Modifier
                     .fillMaxWidth(0.6f)
-                    .clickable {
+                    .bouncyScale(supportPress)
+                    .bouncyClickTarget(supportPress) {
                         SoundManager.playTap()
                         onOpenModal("support")
                     }
@@ -750,24 +718,28 @@ fun SettingsTabContent(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (btnTerms != null) {
+                val termsPress = rememberBouncyPressState(pressedScale = 0.89f)
                 Image(
                     bitmap = btnTerms.asImageBitmap(),
                     contentDescription = "Terms",
                     modifier = Modifier
                         .weight(1f)
-                        .clickable {
+                        .bouncyScale(termsPress)
+                        .bouncyClickTarget(termsPress) {
                             SoundManager.playTap()
                             onOpenModal("terms")
                         }
                 )
             }
             if (btnPrivacy != null) {
+                val privacyPress = rememberBouncyPressState(pressedScale = 0.89f)
                 Image(
                     bitmap = btnPrivacy.asImageBitmap(),
                     contentDescription = "Privacy",
                     modifier = Modifier
                         .weight(1f)
-                        .clickable {
+                        .bouncyScale(privacyPress)
+                        .bouncyClickTarget(privacyPress) {
                             SoundManager.playTap()
                             onOpenModal("privacy")
                         }
@@ -783,12 +755,15 @@ fun SettingToggleColumn(
     switchBitmap: Bitmap?,
     onClick: () -> Unit
 ) {
+    val togglePress = rememberBouncyPressState(pressedScale = 0.88f)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable {
-            SoundManager.playTap()
-            onClick()
-        }
+        modifier = Modifier
+            .bouncyScale(togglePress)
+            .bouncyClickTarget(togglePress) {
+                SoundManager.playTap()
+                onClick()
+            }
     ) {
         if (iconBitmap != null) {
             Image(
@@ -920,13 +895,15 @@ fun ProfileModal(
                         horizontalArrangement = Arrangement.Center,
                         modifier = Modifier.fillMaxWidth()
                     ) {
+                        val decPress = rememberBouncyPressState(pressedScale = 0.85f)
                         Box(
                             modifier = Modifier
                                 .size(28.dp)
+                                .bouncyScale(decPress)
                                 .clip(CircleShape)
                                 .background(Color(0xFFE93D5A))
                                 .border(1.dp, Color.White, CircleShape)
-                                .clickable {
+                                .bouncyClickTarget(decPress) {
                                     if (draftLevel > 1) {
                                         SoundManager.playTap()
                                         draftLevel--
@@ -956,13 +933,15 @@ fun ProfileModal(
 
                         Spacer(modifier = Modifier.width(10.dp))
 
+                        val incPress = rememberBouncyPressState(pressedScale = 0.85f)
                         Box(
                             modifier = Modifier
                                 .size(28.dp)
+                                .bouncyScale(incPress)
                                 .clip(CircleShape)
                                 .background(Color(0xFF2EB55A))
                                 .border(1.dp, Color.White, CircleShape)
-                                .clickable {
+                                .bouncyClickTarget(incPress) {
                                     if (draftLevel < 100) {
                                         SoundManager.playTap()
                                         draftLevel++
@@ -1032,11 +1011,13 @@ fun ProfileModal(
             Spacer(modifier = Modifier.height(16.dp))
 
             // Save Button Outside / Below Panel
+            val savePress = rememberBouncyPressState(pressedScale = 0.88f)
             Box(
                 modifier = Modifier
                     .width(176.dp)
                     .height(48.dp)
-                    .clickable {
+                    .bouncyScale(savePress)
+                    .bouncyClickTarget(savePress) {
                         SoundManager.playPowerup()
                         onSave(draftName.trim().ifEmpty { "Player 1" }, draftAvatarId, draftLevel)
                     },
@@ -1071,17 +1052,19 @@ fun AvatarSlotItem(
     val bitmap = remember(avatar.id) {
         AssetLoader.loadBitmap(context, avatar.assetPath)
     }
+    val slotPress = rememberBouncyPressState(pressedScale = 0.85f)
 
     Box(
         modifier = Modifier
             .size(34.dp)
+            .bouncyScale(slotPress)
             .clip(RoundedCornerShape(6.dp))
             .border(
                 width = if (isSelected) 2.5.dp else 0.dp,
                 color = if (isSelected) Color(0xFFFFE600) else Color.Transparent,
                 shape = RoundedCornerShape(6.dp)
             )
-            .clickable {
+            .bouncyClickTarget(slotPress) {
                 SoundManager.playTap()
                 onSelect()
             }
@@ -1191,12 +1174,14 @@ fun InfoModal(type: String, onDismiss: () -> Unit) {
 
                 Spacer(modifier = Modifier.height(20.dp))
 
+                val closePress = rememberBouncyPressState(pressedScale = 0.88f)
                 Box(
                     modifier = Modifier
+                        .bouncyScale(closePress)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFF2EB55A))
                         .border(1.5.dp, Color.White, RoundedCornerShape(12.dp))
-                        .clickable { onDismiss() }
+                        .bouncyClickTarget(closePress) { onDismiss() }
                         .padding(horizontal = 24.dp, vertical = 8.dp)
                 ) {
                     Text(

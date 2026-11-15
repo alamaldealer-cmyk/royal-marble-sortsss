@@ -54,6 +54,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.game.assets.AssetLoader
 import com.example.game.sound.SoundManager
+import com.example.ui.components.bouncyClickTarget
+import com.example.ui.components.bouncyScale
+import com.example.ui.components.rememberBouncyPressState
 import com.example.ui.theme.FredokaFontFamily
 import kotlinx.coroutines.delay
 import kotlin.math.PI
@@ -256,14 +259,16 @@ fun LevelIntroScreen(
         }
 
         // 3. Skip Button at Top-Right
+        val skipPress = rememberBouncyPressState(pressedScale = 0.88f)
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(16.dp)
+                .bouncyScale(skipPress)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color(0xCC000000))
                 .border(2.dp, Color(0xFFFFD700), RoundedCornerShape(16.dp))
-                .clickable {
+                .bouncyClickTarget(skipPress) {
                     if (!isSkipping) {
                         isSkipping = true
                         SoundManager.playTap()

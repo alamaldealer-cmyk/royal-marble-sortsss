@@ -36,10 +36,11 @@ object GameRules {
         return false
     }
 
-    fun isExposed(grid: Array<Array<GridCell>>, r: Int, c: Int): Boolean {
+    fun isDirectlyExposed(grid: Array<Array<GridCell>>, r: Int, c: Int): Boolean {
         if (r < 0 || r >= GameConstants.GRID_ROWS || c < 0 || c >= GameConstants.GRID_COLS) return false
         val cell = grid[r][c]
         if (cell.kind != CellKind.BLOCK) return false
+        if (cell.fromMagnet) return true
 
         // Exit row (row 5) is open to the funnel below
         if (r == GameConstants.EXIT_ROW) return true
@@ -60,37 +61,52 @@ object GameRules {
         }
     }
 
+    fun isExposed(grid: Array<Array<GridCell>>, r: Int, c: Int): Boolean {
+        if (r < 0 || r >= GameConstants.GRID_ROWS || c < 0 || c >= GameConstants.GRID_COLS) return false
+        val cell = grid[r][c]
+        if (isDirectlyExposed(grid, r, c)) return true
+
+        val group = cell.linkGroup ?: return false
+        if (cell.kind != CellKind.BLOCK && cell.kind != CellKind.LOCKED) return false
+        for (rr in 0 until GameConstants.GRID_ROWS) {
+            for (cc in 0 until GameConstants.GRID_COLS) {
+                if (grid[rr][cc].linkGroup == group && isDirectlyExposed(grid, rr, cc)) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    fun collectLinkedBurstCells(grid: Array<Array<GridCell>>, r: Int, c: Int): List<Pair<Int, Int>> {
+        if (r < 0 || r >= GameConstants.GRID_ROWS || c < 0 || c >= GameConstants.GRID_COLS) return emptyList()
+        val origin = grid[r][c]
+        if (origin.kind != CellKind.BLOCK && origin.kind != CellKind.LOCKED) return emptyList()
+        val group = origin.linkGroup ?: return listOf(Pair(r, c))
+
+        val burstList = mutableListOf(Pair(r, c))
+        for (rr in 0 until GameConstants.GRID_ROWS) {
+            for (cc in 0 until GameConstants.GRID_COLS) {
+                if (rr == r && cc == c) continue
+                val candidate = grid[rr][cc]
+                if (candidate.linkGroup == group &&
+                    (candidate.kind == CellKind.BLOCK || candidate.kind == CellKind.LOCKED) &&
+                    candidate.animState != "magnet_receiving"
+                ) {
+                    burstList.add(Pair(rr, cc))
+                }
+            }
+        }
+        return burstList
+    }
+
     fun updateGridAfterChange(grid: Array<Array<GridCell>>): GridUpdateResult {
         val revealed = mutableListOf<RevealedCell>()
         val dispensed = mutableListOf<DispensedCell>()
         val newlyExposed = mutableListOf<Pair<Int, Int>>()
 
-        // 1. Reveal locked tiles adjacent to any empty cell
-        for (r in 0 until GameConstants.GRID_ROWS) {
-            for (c in 0 until GameConstants.GRID_COLS) {
-                val cell = grid[r][c]
-                if (cell.kind == CellKind.LOCKED) {
-                    val hasEmptyNeighbor = arrayOf(
-                        Pair(1, 0), Pair(-1, 0), Pair(0, 1), Pair(0, -1)
-                    ).any { (dr, dc) ->
-                        val nr = r + dr
-                        val nc = c + dc
-                        if (nr in 0 until GameConstants.GRID_ROWS && nc in 0 until GameConstants.GRID_COLS) {
-                            grid[nr][nc].kind == CellKind.EMPTY
-                        } else false
-                    }
-
-                    if (hasEmptyNeighbor) {
-                        cell.kind = CellKind.BLOCK
-                        cell.animState = "revealing"
-                        cell.animTimer = 0f
-                        cell.color?.let { revealed.add(RevealedCell(r, c, it)) }
-                    }
-                }
-            }
-        }
-
-        // 2. Check dispensers (if target slot in dispenser's facing direction is empty and counter > 0, slide block in)
+        // 1. Check dispensers FIRST (if target slot in dispenser's facing direction is empty and counter > 0, refill it
+        // immediately so adjacent LOCKED buckets stay covered/locked until the dispenser actually runs out)
         for (r in 0 until GameConstants.GRID_ROWS) {
             for (c in 0 until GameConstants.GRID_COLS) {
                 val cell = grid[r][c]
@@ -121,6 +137,32 @@ object GameRules {
                             offsetY = startOy.toFloat()
                         )
                         dispensed.add(DispensedCell(targetR, targetC, nextColor, r, c))
+                    }
+                }
+            }
+        }
+
+        // 2. Reveal locked tiles adjacent to any slot that actually remains empty
+        for (r in 0 until GameConstants.GRID_ROWS) {
+            for (c in 0 until GameConstants.GRID_COLS) {
+                val cell = grid[r][c]
+                if (cell.kind == CellKind.LOCKED) {
+                    val hasEmptyNeighbor = arrayOf(
+                        Pair(1, 0), Pair(-1, 0), Pair(0, 1), Pair(0, -1)
+                    ).any { (dr, dc) ->
+                        val nr = r + dr
+                        val nc = c + dc
+                        if (nr in 0 until GameConstants.GRID_ROWS && nc in 0 until GameConstants.GRID_COLS) {
+                            grid[nr][nc].kind == CellKind.EMPTY
+                        } else false
+                    }
+
+                    if (hasEmptyNeighbor) {
+                        cell.kind = CellKind.BLOCK
+                        cell.isMystery = false
+                        cell.animState = "revealing"
+                        cell.animTimer = 0f
+                        cell.color?.let { revealed.add(RevealedCell(r, c, it)) }
                     }
                 }
             }
@@ -442,6 +484,7 @@ object GameRules {
                         while (slot < GameConstants.BALLS_PER_BLOCK && idx < colorBalls.size) {
                             cell.animState = "magnet_receiving"
                             cell.animTimer = 0f
+                            cell.fromMagnet = true
                             assignments.add(
                                 MagnetBallAssignment(
                                     beltBall = colorBalls[idx],
@@ -477,7 +520,8 @@ object GameRules {
                     animState = "magnet_receiving",
                     animTimer = 0f,
                     scaleX = 0.25f,
-                    scaleY = 0.25f
+                    scaleY = 0.25f,
+                    fromMagnet = true
                 )
 
                 var slot = 0

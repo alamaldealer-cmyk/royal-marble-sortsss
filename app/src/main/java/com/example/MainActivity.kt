@@ -5,6 +5,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -160,85 +165,94 @@ fun RoyalMarblesApp() {
             .fillMaxSize()
             .background(Color(0xFF002766))
     ) {
-        when (currentView) {
-            "story" -> {
-                val episode = activeStory ?: StoryCatalog.chapters.first()
-                StoryCutsceneScreen(
-                    episode = episode,
-                    levelToStart = currentLevel,
-                    onComplete = {
-                        currentView = if (storyReturnToHome) "home" else "playing"
-                    }
-                )
-            }
-
-            "playing" -> {
-                BackHandler {
-                    currentView = "home"
-                }
-
-                key(currentLevel) {
-                    GameBoardScreen(
-                        levelNumber = currentLevel,
-                        coins = coins,
-                        onReturnHome = { currentView = "home" },
-                        onAddCoins = { amount -> saveCoins(coins + amount) },
-                        onLevelAdvanced = { nextLvl ->
-                            if (nextLvl > 100) {
-                                saveLevel(1)
-                                activeStory = StoryCatalog.grandFinale
-                                storyReturnToHome = true
-                                currentView = "story"
-                            } else {
-                                saveLevel(nextLvl)
-                                val milestoneStory = StoryCatalog.storyForStartingLevel(nextLvl)
-                                if (milestoneStory != null) {
-                                    activeStory = milestoneStory
-                                    storyReturnToHome = false
-                                    currentView = "story"
-                                }
-                            }
+        AnimatedContent(
+            targetState = currentView,
+            transitionSpec = {
+                fadeIn(animationSpec = tween(durationMillis = 170, delayMillis = 45)) togetherWith
+                    fadeOut(animationSpec = tween(durationMillis = 160))
+            },
+            label = "root_screen_transition"
+        ) { view ->
+            when (view) {
+                "story" -> {
+                    val episode = activeStory ?: StoryCatalog.chapters.first()
+                    StoryCutsceneScreen(
+                        episode = episode,
+                        levelToStart = currentLevel,
+                        onComplete = {
+                            currentView = if (storyReturnToHome) "home" else "playing"
                         }
                     )
                 }
-            }
 
-            "color_test" -> {
-                BucketColorTestScreen(
-                    onBack = { currentView = "home" }
-                )
-            }
-
-            else -> {
-                HomeScreen(
-                    levelNumber = currentLevel,
-                    coins = coins,
-                    playerName = playerName,
-                    selectedAvatarId = selectedAvatarId,
-                    soundEnabled = soundEnabled,
-                    musicEnabled = musicEnabled,
-                    vibrationEnabled = vibrationEnabled,
-                    onStartGame = { startPlayingWithOptionalStory(currentLevel) },
-                    onOpenColorTest = { currentView = "color_test" },
-                    onAddCoins = { amount -> saveCoins(coins + amount) },
-                    onUpdateProfile = { newName, newAvatarId -> saveProfile(newName, newAvatarId) },
-                    onSetLevel = { newLevel -> saveLevel(newLevel) },
-                    onToggleSound = {
-                        val next = !soundEnabled
-                        soundEnabled = next
-                        prefs.edit().putBoolean("sound_enabled", next).apply()
-                    },
-                    onToggleMusic = {
-                        val next = !musicEnabled
-                        musicEnabled = next
-                        prefs.edit().putBoolean("music_enabled", next).apply()
-                    },
-                    onToggleVibration = {
-                        val next = !vibrationEnabled
-                        vibrationEnabled = next
-                        prefs.edit().putBoolean("vibration_enabled", next).apply()
+                "playing" -> {
+                    BackHandler {
+                        currentView = "home"
                     }
-                )
+
+                    key(currentLevel) {
+                        GameBoardScreen(
+                            levelNumber = currentLevel,
+                            coins = coins,
+                            onReturnHome = { currentView = "home" },
+                            onAddCoins = { amount -> saveCoins(coins + amount) },
+                            onLevelAdvanced = { nextLvl ->
+                                if (nextLvl > 100) {
+                                    saveLevel(1)
+                                    activeStory = StoryCatalog.grandFinale
+                                    storyReturnToHome = true
+                                    currentView = "story"
+                                } else {
+                                    saveLevel(nextLvl)
+                                    val milestoneStory = StoryCatalog.storyForStartingLevel(nextLvl)
+                                    if (milestoneStory != null) {
+                                        activeStory = milestoneStory
+                                        storyReturnToHome = false
+                                        currentView = "story"
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+
+                "color_test" -> {
+                    BucketColorTestScreen(
+                        onBack = { currentView = "home" }
+                    )
+                }
+
+                else -> {
+                    HomeScreen(
+                        levelNumber = currentLevel,
+                        coins = coins,
+                        playerName = playerName,
+                        selectedAvatarId = selectedAvatarId,
+                        soundEnabled = soundEnabled,
+                        musicEnabled = musicEnabled,
+                        vibrationEnabled = vibrationEnabled,
+                        onStartGame = { startPlayingWithOptionalStory(currentLevel) },
+                        onOpenColorTest = { currentView = "color_test" },
+                        onAddCoins = { amount -> saveCoins(coins + amount) },
+                        onUpdateProfile = { newName, newAvatarId -> saveProfile(newName, newAvatarId) },
+                        onSetLevel = { newLevel -> saveLevel(newLevel) },
+                        onToggleSound = {
+                            val next = !soundEnabled
+                            soundEnabled = next
+                            prefs.edit().putBoolean("sound_enabled", next).apply()
+                        },
+                        onToggleMusic = {
+                            val next = !musicEnabled
+                            musicEnabled = next
+                            prefs.edit().putBoolean("music_enabled", next).apply()
+                        },
+                        onToggleVibration = {
+                            val next = !vibrationEnabled
+                            vibrationEnabled = next
+                            prefs.edit().putBoolean("vibration_enabled", next).apply()
+                        }
+                    )
+                }
             }
         }
 

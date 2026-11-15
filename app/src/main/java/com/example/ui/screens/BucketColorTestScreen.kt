@@ -58,6 +58,10 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import com.example.ui.components.BucketFluffyRenderer
+import com.example.ui.components.bouncyClickTarget
+import com.example.ui.components.bouncyScale
+import com.example.ui.components.rememberBouncyPressState
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -93,9 +97,8 @@ fun BucketColorTestScreen(
     val context = LocalContext.current
     val allColors = MarbleColor.entries
 
-    // Start on index 8 (BLACK - first of the 8 new colors) or index 0? Starting on 0 lets user step 1..16 cleanly,
-    // and jumping directly to any swatch is 1 tap!
-    var colorIndex by remember { mutableIntStateOf(0) }
+    // Start on index 8 (BLACK - first of the 8 newly updated bucket colors); all 16 colors remain 1 tap away.
+    var colorIndex by remember { mutableIntStateOf(8) }
     var isAutoPlaying by remember { mutableStateOf(true) }
 
     // Live bucket simulation state
@@ -255,13 +258,17 @@ fun BucketColorTestScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                val backPress = rememberBouncyPressState(pressedScale = 0.86f)
                 IconButton(
                     onClick = {
+                        backPress.triggerPulse()
                         SoundManager.playTap()
                         onBack()
                     },
+                    interactionSource = backPress.interactionSource,
                     modifier = Modifier
                         .size(48.dp)
+                        .bouncyScale(backPress)
                         .clip(CircleShape)
                         .background(Color(0xFF0B5FA7))
                         .border(2.dp, Color(0xFFFFD700), CircleShape)
@@ -293,13 +300,17 @@ fun BucketColorTestScreen(
                 }
 
                 // Auto-Cycle Play/Pause Button
+                val autoPress = rememberBouncyPressState(pressedScale = 0.86f)
                 IconButton(
                     onClick = {
+                        autoPress.triggerPulse()
                         SoundManager.playTap()
                         isAutoPlaying = !isAutoPlaying
                     },
+                    interactionSource = autoPress.interactionSource,
                     modifier = Modifier
                         .size(48.dp)
+                        .bouncyScale(autoPress)
                         .clip(CircleShape)
                         .background(if (isAutoPlaying) Color(0xFF22C55E) else Color(0xFFE93D5A))
                         .border(2.dp, Color.White, CircleShape)
@@ -419,24 +430,19 @@ fun BucketColorTestScreen(
                             canvas.drawBitmap(activeSheet, srcRect, dstRect, null)
                         }
 
-                        // Draw Peeking Fluffies inside filled holes
+                        // Draw Peeking Fluffies inside filled holes with bright rim separation & dark-color lift
                         if (filledCount > 0 && animState != "vanish") {
-                            val holeOffsets = floatArrayOf(-baltiSize * 0.21f, 0f, baltiSize * 0.21f)
-                            val fRadius = baltiSize * 0.14f
-                            val fY = bucketCenterY - baltiSize * 0.05f
-                            for (h in 0 until minOf(filledCount, 3)) {
-                                val mood = if (animState == "hold_full") "happy_open" else "content"
-                                val fluffyBmp = AssetLoader.getFluffy(context, activeColor, mood)
-                                if (fluffyBmp != null) {
-                                    val fX = centerX + holeOffsets[h]
-                                    canvas.drawBitmap(
-                                        fluffyBmp,
-                                        null,
-                                        RectF(fX - fRadius, fY - fRadius, fX + fRadius, fY + fRadius),
-                                        null
-                                    )
-                                }
-                            }
+                            BucketFluffyRenderer.drawPeekingFluffies(
+                                canvas = canvas,
+                                context = context,
+                                color = activeColor,
+                                centerX = centerX,
+                                bucketCenterY = bucketCenterY,
+                                baltiSize = baltiSize,
+                                filledCount = filledCount,
+                                alpha = 255,
+                                moodProvider = { if (animState == "hold_full") "happy_open" else "content" }
+                            )
                         }
 
                         // Draw Dropping Fluffy flying into opening
@@ -492,13 +498,17 @@ fun BucketColorTestScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    val prevPress = rememberBouncyPressState(pressedScale = 0.86f)
                     IconButton(
                         onClick = {
+                            prevPress.triggerPulse()
                             SoundManager.playTap()
                             selectColor(colorIndex - 1)
                         },
+                        interactionSource = prevPress.interactionSource,
                         modifier = Modifier
                             .size(48.dp)
+                            .bouncyScale(prevPress)
                             .clip(RoundedCornerShape(14.dp))
                             .background(Color(0xFF0B5FA7))
                             .border(2.dp, Color(0xFF00C4FF), RoundedCornerShape(14.dp))
@@ -546,13 +556,17 @@ fun BucketColorTestScreen(
                         }
                     }
 
+                    val nextPress = rememberBouncyPressState(pressedScale = 0.86f)
                     IconButton(
                         onClick = {
+                            nextPress.triggerPulse()
                             SoundManager.playTap()
                             selectColor(colorIndex + 1)
                         },
+                        interactionSource = nextPress.interactionSource,
                         modifier = Modifier
                             .size(48.dp)
+                            .bouncyScale(nextPress)
                             .clip(RoundedCornerShape(14.dp))
                             .background(Color(0xFF0B5FA7))
                             .border(2.dp, Color(0xFF00C4FF), RoundedCornerShape(14.dp))
@@ -572,9 +586,11 @@ fun BucketColorTestScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    val dropPress = rememberBouncyPressState(pressedScale = 0.90f)
                     Box(
                         modifier = Modifier
                             .weight(1f)
+                            .bouncyScale(dropPress)
                             .height(48.dp)
                             .clip(RoundedCornerShape(14.dp))
                             .background(
@@ -583,7 +599,7 @@ fun BucketColorTestScreen(
                                 )
                             )
                             .border(2.dp, Color(0xFFA8F028), RoundedCornerShape(14.dp))
-                            .clickable { triggerManualDrop() }
+                            .bouncyClickTarget(dropPress) { triggerManualDrop() }
                             .testTag("test_step_drop"),
                         contentAlignment = Alignment.Center
                     ) {
@@ -596,13 +612,17 @@ fun BucketColorTestScreen(
                         )
                     }
 
+                    val replayPress = rememberBouncyPressState(pressedScale = 0.86f)
                     IconButton(
                         onClick = {
+                            replayPress.triggerPulse()
                             SoundManager.playTap()
                             triggerReplayForCurrent()
                         },
+                        interactionSource = replayPress.interactionSource,
                         modifier = Modifier
                             .size(48.dp)
+                            .bouncyScale(replayPress)
                             .clip(RoundedCornerShape(14.dp))
                             .background(Color(0xFF7C3AED))
                             .border(2.dp, Color(0xFFE9D5FF), RoundedCornerShape(14.dp))
@@ -716,9 +736,11 @@ fun BucketColorTestScreen(
                                     val c = allColors[idx]
                                     val selected = idx == colorIndex
                                     val bucketThumb = remember(c) { AssetLoader.getRailBucket(context, c) }
+                                    val swatchPress = rememberBouncyPressState(pressedScale = 0.85f)
                                     Box(
                                         modifier = Modifier
                                             .size(38.dp)
+                                            .bouncyScale(swatchPress)
                                             .clip(RoundedCornerShape(10.dp))
                                             .background(if (selected) Color(0xFF1D4ED8) else Color(0xFF001945))
                                             .border(
@@ -726,7 +748,7 @@ fun BucketColorTestScreen(
                                                 color = if (selected) Color(0xFFFFE600) else Color(0xFF38BDF8),
                                                 shape = RoundedCornerShape(10.dp)
                                             )
-                                            .clickable {
+                                            .bouncyClickTarget(swatchPress) {
                                                 SoundManager.playTap()
                                                 selectColor(idx)
                                             }
