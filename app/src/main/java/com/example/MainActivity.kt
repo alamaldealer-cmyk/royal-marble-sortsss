@@ -30,6 +30,7 @@ import com.example.game.assets.AssetLoader
 import com.example.game.sound.SoundManager
 import com.example.game.story.StoryCatalog
 import com.example.game.story.StoryEpisode
+import com.example.ui.screens.BucketColorTestScreen
 import com.example.ui.screens.GameBoardScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.SplashScreen
@@ -202,6 +203,12 @@ fun RoyalMarblesApp() {
                 }
             }
 
+            "color_test" -> {
+                BucketColorTestScreen(
+                    onBack = { currentView = "home" }
+                )
+            }
+
             else -> {
                 HomeScreen(
                     levelNumber = currentLevel,
@@ -212,6 +219,7 @@ fun RoyalMarblesApp() {
                     musicEnabled = musicEnabled,
                     vibrationEnabled = vibrationEnabled,
                     onStartGame = { startPlayingWithOptionalStory(currentLevel) },
+                    onOpenColorTest = { currentView = "color_test" },
                     onAddCoins = { amount -> saveCoins(coins + amount) },
                     onUpdateProfile = { newName, newAvatarId -> saveProfile(newName, newAvatarId) },
                     onSetLevel = { newLevel -> saveLevel(newLevel) },

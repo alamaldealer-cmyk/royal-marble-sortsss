@@ -165,7 +165,7 @@ object StoryCatalog {
                 StoryBeat(
                     sceneLabel = "2 • BEAM OVER THE BAY",
                     speaker = "Lord Shadow Puff",
-                    dialogue = "\"Faster conveyor belts! Let's see you keep up with 24 marbles at once!\"",
+                    dialogue = "\"Faster conveyor belts! Let's see you keep up with 30 marbles at once!\"",
                     choreography = StoryStageChoreography.ABDUCTION_BEAM,
                     heroSprite = "story/hero_worried.png",
                     villainSprite = "story/villain_point.png",

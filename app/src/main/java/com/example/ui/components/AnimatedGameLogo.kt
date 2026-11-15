@@ -61,7 +61,9 @@ private val FLOOFIE_LOGO_SEQUENCE = listOf(
 
 @Composable
 fun AnimatedGameLogo(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    testTagName: String = "home_animated_logo",
+    enableTap: Boolean = true
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -251,24 +253,30 @@ fun AnimatedGameLogo(
                     scaleX = tapBounce.value
                     scaleY = tapBounce.value
                 }
-                .testTag("home_animated_logo")
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    SoundManager.playFluffyCheer()
-                    poseIndex = 6 // Jump to excited cheer pose
-                    scope.launch {
-                        tapBounce.snapTo(0.92f)
-                        tapBounce.animateTo(
-                            targetValue = 1f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessMedium
-                            )
-                        )
+                .testTag(testTagName)
+                .then(
+                    if (enableTap) {
+                        Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            SoundManager.playFluffyCheer()
+                            poseIndex = 6 // Jump to excited cheer pose
+                            scope.launch {
+                                tapBounce.snapTo(0.92f)
+                                tapBounce.animateTo(
+                                    targetValue = 1f,
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessMedium
+                                    )
+                                )
+                            }
+                        }
+                    } else {
+                        Modifier
                     }
-                },
+                ),
             contentAlignment = Alignment.Center
         ) {
             // 1. Back swaying tropical leaves (Left side)

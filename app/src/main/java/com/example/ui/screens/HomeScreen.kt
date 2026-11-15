@@ -92,6 +92,7 @@ fun HomeScreen(
     musicEnabled: Boolean,
     vibrationEnabled: Boolean,
     onStartGame: () -> Unit,
+    onOpenColorTest: () -> Unit = {},
     onAddCoins: (Int) -> Unit,
     onUpdateProfile: (String, String) -> Unit,
     onSetLevel: (Int) -> Unit,
@@ -311,6 +312,42 @@ fun HomeScreen(
                                     letterSpacing = 1.sp
                                 )
                             }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.72f)
+                                .widthIn(max = 300.dp)
+                                .height(48.dp)
+                                .shadow(6.dp, RoundedCornerShape(24.dp))
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color(0xFF38BDF8),
+                                            Color(0xFF0284C7),
+                                            Color(0xFF0369A1)
+                                        )
+                                    )
+                                )
+                                .border(2.5.dp, Color(0xFFFFD700), RoundedCornerShape(24.dp))
+                                .clickable {
+                                    SoundManager.playTap()
+                                    onOpenColorTest()
+                                }
+                                .testTag("color_test_button"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "TEST 16 COLORS & BUCKETS",
+                                fontFamily = FredokaFontFamily,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 14.sp,
+                                color = Color.White,
+                                letterSpacing = 0.8.sp
+                            )
                         }
                     }
                 }
@@ -1103,7 +1140,7 @@ fun InfoModal(type: String, onDismiss: () -> Unit) {
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "By playing Royal Marbles, you agree to enjoy the puzzle mechanics responsibly. All coins and boosters are in-game virtual items for entertainment purposes.",
+                            text = "By playing Floofies Marble Sort, you agree to enjoy the puzzle mechanics responsibly. All coins and boosters are in-game virtual items for entertainment purposes.",
                             fontFamily = FredokaFontFamily,
                             fontWeight = FontWeight.Medium,
                             fontSize = 12.sp,

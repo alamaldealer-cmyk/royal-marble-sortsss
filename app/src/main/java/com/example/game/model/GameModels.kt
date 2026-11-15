@@ -8,7 +8,15 @@ enum class MarbleColor(val key: String) {
     LIME("lime"),
     CYAN("cyan"),
     ORANGE("orange"),
-    RED("red");
+    RED("red"),
+    BLACK("black"),
+    DARK_GREEN("dark_green"),
+    BLUE("blue"),
+    BROWN("brown"),
+    MINT("mint"),
+    WHITE("white"),
+    MAROON("maroon"),
+    LIGHT_PINK("light_pink");
 
     companion object {
         fun fromKey(key: String): MarbleColor {
@@ -25,18 +33,26 @@ enum class CellKind {
     WALL
 }
 
+enum class DispenserDirection {
+    DOWN,
+    RIGHT,
+    LEFT
+}
+
 data class GridCell(
     var kind: CellKind = CellKind.WALL,
     var color: MarbleColor? = null,
     var isMystery: Boolean = false,
     var counter: Int? = null,
     val queue: MutableList<MarbleColor> = mutableListOf(),
+    var direction: DispenserDirection = DispenserDirection.DOWN,
     var animState: String = "idle", // idle, pressed, bursting, revealing, dispensing, popBounced, blocked, emptying, cave_dispensing
     var animTimer: Float = 0f,
     var burstSpawned: Boolean = false,
     var spawnedCount: Int = 0,
     var scaleX: Float = 1f,
     var scaleY: Float = 1f,
+    var offsetX: Float = 0f,
     var offsetY: Float = 0f,
     var ballCount: Int = 9
 ) {
@@ -47,12 +63,14 @@ data class GridCell(
             isMystery = isMystery,
             counter = counter,
             queue = queue.toMutableList(),
+            direction = direction,
             animState = animState,
             animTimer = animTimer,
             burstSpawned = burstSpawned,
             spawnedCount = spawnedCount,
             scaleX = scaleX,
             scaleY = scaleY,
+            offsetX = offsetX,
             offsetY = offsetY,
             ballCount = ballCount
         )
@@ -163,6 +181,44 @@ data class MagnetReturningBall(
     val delay: Float = 0f,
     val duration: Float = 0.46f,
     var landed: Boolean = false
+)
+
+data class CannonCollectedBall(
+    val id: Int,
+    val color: MarbleColor,
+    val startX: Float,
+    val startY: Float,
+    val targetCol: Int,
+    val targetBrick: Brick?,
+    val delay: Float,
+    val swirlSeed: Float
+)
+
+data class CannonProjectile(
+    val id: Int,
+    val color: MarbleColor,
+    val startX: Float,
+    val startY: Float,
+    val controlX: Float,
+    val controlY: Float,
+    val targetX: Float,
+    val targetY: Float,
+    val targetCol: Int,
+    val targetBrick: Brick?,
+    var elapsed: Float = 0f,
+    val delay: Float = 0f,
+    val duration: Float = 0.34f,
+    var landed: Boolean = false
+)
+
+data class CannonSmokePuff(
+    var x: Float,
+    var y: Float,
+    val vx: Float,
+    val vy: Float,
+    val baseScale: Float,
+    var life: Float = 0f,
+    val maxLife: Float = 0.72f
 )
 
 data class LevelData(

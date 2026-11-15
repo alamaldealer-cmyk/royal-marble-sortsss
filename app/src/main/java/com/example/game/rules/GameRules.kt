@@ -2,8 +2,10 @@ package com.example.game.rules
 
 import com.example.game.constants.GameConstants
 import com.example.game.model.BeltBall
+import com.example.game.model.Brick
 import com.example.game.model.BrickColumn
 import com.example.game.model.CellKind
+import com.example.game.model.DispenserDirection
 import com.example.game.model.FunnelBall
 import com.example.game.model.GridCell
 import com.example.game.model.MarbleColor
@@ -21,10 +23,15 @@ data class MatchResult(val matchedColIndex: Int, val targetHoleIndex: Int)
 data class ShuffleResult(val shuffled: Boolean, val swappedColumns: List<Int>)
 
 object GameRules {
-    fun shouldBlockBlockTap(waitingBallsCount: Int, currentlyLocked: Boolean): Boolean {
-        if (waitingBallsCount >= GameConstants.MAX_WAITING_BALLS) return true
+    fun shouldBlockBlockTap(
+        waitingBallsCount: Int,
+        currentlyLocked: Boolean,
+        maxWaitingBalls: Int = GameConstants.MAX_WAITING_BALLS,
+        resumeWaitingBalls: Int = GameConstants.RESUME_WAITING_BALLS
+    ): Boolean {
+        if (waitingBallsCount >= maxWaitingBalls) return true
         if (currentlyLocked) {
-            return waitingBallsCount > GameConstants.RESUME_WAITING_BALLS
+            return waitingBallsCount > resumeWaitingBalls
         }
         return false
     }
@@ -83,28 +90,37 @@ object GameRules {
             }
         }
 
-        // 2. Check dispensers (if empty below and counter > 0, slide block in)
+        // 2. Check dispensers (if target slot in dispenser's facing direction is empty and counter > 0, slide block in)
         for (r in 0 until GameConstants.GRID_ROWS) {
             for (c in 0 until GameConstants.GRID_COLS) {
                 val cell = grid[r][c]
                 if (cell.kind == CellKind.DISPENSER && (cell.counter ?: 0) > 0) {
-                    val belowR = r + 1
-                    if (belowR < GameConstants.GRID_ROWS && grid[belowR][c].kind == CellKind.EMPTY) {
+                    val (targetR, targetC, startOx, startOy) = when (cell.direction) {
+                        DispenserDirection.DOWN -> listOf(r + 1, c, 0, -28)
+                        DispenserDirection.RIGHT -> listOf(r, c + 1, -28, 0)
+                        DispenserDirection.LEFT -> listOf(r, c - 1, 28, 0)
+                    }
+                    if (targetR in 0 until GameConstants.GRID_ROWS &&
+                        targetC in 0 until GameConstants.GRID_COLS &&
+                        grid[targetR][targetC].kind == CellKind.EMPTY
+                    ) {
                         val nextColor = if (cell.queue.isNotEmpty()) cell.queue.removeAt(0) else MarbleColor.PURPLE
                         cell.color = nextColor
                         cell.counter = (cell.counter ?: 1) - 1
                         cell.animState = "cave_dispensing"
                         cell.animTimer = 0f
-                        grid[belowR][c] = GridCell(
+                        grid[targetR][targetC] = GridCell(
                             kind = CellKind.BLOCK,
                             color = nextColor,
+                            direction = cell.direction,
                             animState = "dispensing",
                             animTimer = 0f,
                             scaleX = 0.65f,
                             scaleY = 0.65f,
-                            offsetY = -28f
+                            offsetX = startOx.toFloat(),
+                            offsetY = startOy.toFloat()
                         )
-                        dispensed.add(DispensedCell(belowR, c, nextColor, r, c))
+                        dispensed.add(DispensedCell(targetR, targetC, nextColor, r, c))
                     }
                 }
             }
@@ -313,6 +329,81 @@ object GameRules {
                 }
                 reservedSlots[targetPos] = slot
             }
+        }
+
+        return assignments
+    }
+
+    data class CannonTargetAssignment(
+        val beltBall: BeltBall,
+        val targetCol: Int,
+        val targetBrick: Brick?
+    )
+
+    fun planCannonBlast(
+        columns: List<BrickColumn>,
+        beltBalls: List<BeltBall>
+    ): List<CannonTargetAssignment> {
+        if (beltBalls.isEmpty()) return emptyList()
+
+        val assignments = mutableListOf<CannonTargetAssignment>()
+
+        for (ball in beltBalls) {
+            var chosenCol = -1
+            var chosenBrick: Brick? = null
+
+            // 1. Prioritize matching front active buckets (index 0) with free capacity
+            var bestFrontScore = -1
+            for (cIdx in columns.indices) {
+                val front = columns[cIdx].bricks.firstOrNull() ?: continue
+                if (front.color == ball.color &&
+                    front.animState != "vanish" &&
+                    front.animState != "hold_full" &&
+                    (front.filled + front.inFlight) < GameConstants.BRICK_HOLES
+                ) {
+                    val fillScore = front.filled + front.inFlight
+                    if (fillScore > bestFrontScore) {
+                        bestFrontScore = fillScore
+                        chosenCol = cIdx
+                        chosenBrick = front
+                    }
+                }
+            }
+
+            // 2. If no front bucket matches or has room, target matching buckets behind in any column!
+            if (chosenBrick == null) {
+                val maxDepth = columns.maxOfOrNull { it.bricks.size } ?: 0
+                outer@ for (depth in 1 until maxDepth) {
+                    var bestBehindScore = -1
+                    for (cIdx in columns.indices) {
+                        val brick = columns[cIdx].bricks.getOrNull(depth) ?: continue
+                        if (brick.color == ball.color &&
+                            brick.animState != "vanish" &&
+                            brick.animState != "hold_full" &&
+                            (brick.filled + brick.inFlight) < GameConstants.BRICK_HOLES
+                        ) {
+                            val fillScore = brick.filled + brick.inFlight
+                            if (fillScore > bestBehindScore) {
+                                bestBehindScore = fillScore
+                                chosenCol = cIdx
+                                chosenBrick = brick
+                            }
+                        }
+                    }
+                    if (chosenBrick != null) break@outer
+                }
+            }
+
+            if (chosenBrick != null) {
+                chosenBrick.inFlight++
+            }
+            assignments.add(
+                CannonTargetAssignment(
+                    beltBall = ball,
+                    targetCol = chosenCol,
+                    targetBrick = chosenBrick
+                )
+            )
         }
 
         return assignments
