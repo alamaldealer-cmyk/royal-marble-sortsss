@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Floofies Marble Sort"
+rootProject.name = "Royal Marbles"
 
 include(":app")

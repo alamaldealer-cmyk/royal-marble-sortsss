@@ -37,10 +37,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -108,7 +112,7 @@ fun HomeScreen(
     // Bitmaps
     val tropicalBg = remember { AssetLoader.loadBitmap(context, "tropical_beach_resort_entrance.png") }
     val coinRackBitmap = remember { AssetLoader.loadBitmap(context, "coin_rack.png") }
-    val btnLevelGreen = remember { AssetLoader.loadBitmap(context, "profile/btn_level_green.png") }
+    val btnPlayGreenPill = remember { AssetLoader.loadBitmap(context, "profile/btn_play_green_pill.png") }
     val goldCoinBitmap = remember { AssetLoader.loadBitmap(context, "coins/coin_01.png") }
 
     val currentAvatar = AVATAR_OPTIONS.firstOrNull { it.id == selectedAvatarId } ?: AVATAR_OPTIONS[0]
@@ -277,9 +281,9 @@ fun HomeScreen(
 
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(0.8f)
-                                .widthIn(max = 340.dp)
-                                .height(82.dp)
+                                .fillMaxWidth(0.64f)
+                                .widthIn(max = 250.dp)
+                                .aspectRatio(640f / 200f)
                                 .testTag("play_button")
                                 .clickable {
                                     SoundManager.playTap()
@@ -287,29 +291,45 @@ fun HomeScreen(
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            if (btnLevelGreen != null) {
+                            if (btnPlayGreenPill != null) {
                                 Image(
-                                    bitmap = btnLevelGreen.asImageBitmap(),
-                                    contentDescription = "Play Level $levelNumber",
-                                    modifier = Modifier.fillMaxSize()
+                                    bitmap = btnPlayGreenPill.asImageBitmap(),
+                                    contentDescription = "Level $levelNumber",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.FillBounds
                                 )
                             }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(contentAlignment = Alignment.Center) {
                                 Text(
                                     text = "LEVEL $levelNumber",
-                                    fontFamily = FredokaFontFamily,
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 28.sp,
-                                    color = Color.White,
-                                    letterSpacing = 2.sp
+                                    maxLines = 1,
+                                    style = TextStyle(
+                                        fontFamily = FredokaFontFamily,
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 32.sp,
+                                        color = Color(0xFF034400),
+                                        letterSpacing = 1.8.sp,
+                                        drawStyle = Stroke(
+                                            width = 7f,
+                                            join = StrokeJoin.Round
+                                        ),
+                                        shadow = Shadow(
+                                            color = Color(0xAA012800),
+                                            offset = Offset(0f, 3f),
+                                            blurRadius = 4f
+                                        )
+                                    )
                                 )
                                 Text(
-                                    text = "TAP TO PLAY",
-                                    fontFamily = FredokaFontFamily,
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 12.sp,
-                                    color = Color(0xFFFFE27D),
-                                    letterSpacing = 1.sp
+                                    text = "LEVEL $levelNumber",
+                                    maxLines = 1,
+                                    style = TextStyle(
+                                        fontFamily = FredokaFontFamily,
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 32.sp,
+                                        color = Color.White,
+                                        letterSpacing = 1.8.sp
+                                    )
                                 )
                             }
                         }

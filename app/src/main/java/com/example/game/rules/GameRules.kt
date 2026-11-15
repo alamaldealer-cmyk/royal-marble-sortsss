@@ -177,22 +177,33 @@ object GameRules {
         physicsBalls: List<FunnelBall>
     ): ShuffleResult {
         val activeColors = (beltBalls.map { it.color } + physicsBalls.map { it.color }).toSet()
-        val swappedCols = mutableListOf<Int>()
+        val swappedCols = mutableSetOf<Int>()
         var didSwap = false
+
+        fun isBrickLockedOrFinishing(brick: Brick): Boolean {
+            return brick.inFlight > 0 ||
+                brick.filled >= GameConstants.BRICK_HOLES ||
+                brick.animState == "hit_3" ||
+                brick.animState == "hold_full" ||
+                brick.animState == "vanish"
+        }
 
         fun canSwapFront(col: BrickColumn): Boolean {
             if (col.bricks.size <= 1) return false
             val front = col.bricks[0]
-            return front.filled == 0 && front.inFlight == 0 &&
-                front.animState != "hit_3" && front.animState != "hold_full" && front.animState != "vanish"
+            return front.filled == 0 && !isBrickLockedOrFinishing(front)
         }
 
+        // 1. Same-column promotion when front is empty (filled == 0) & non-matching
         for (i in columns.indices) {
             val col = columns[i]
             if (canSwapFront(col)) {
                 val topColor = col.bricks[0].color
                 if (!activeColors.contains(topColor)) {
-                    val matchingIdx = col.bricks.indexOfFirst { it != col.bricks[0] && activeColors.contains(it.color) }
+                    val matchingIdx = (1 until col.bricks.size).firstOrNull { idx ->
+                        val b = col.bricks[idx]
+                        !isBrickLockedOrFinishing(b) && activeColors.contains(b.color)
+                    } ?: -1
                     if (matchingIdx > 0) {
                         val promoted = col.bricks.removeAt(matchingIdx)
                         col.bricks.add(0, promoted)
@@ -203,10 +214,87 @@ object GameRules {
             }
         }
 
+        // 2. Cross-column rescue: if any active color is still trapped behind a bucket
+        // (including behind a partially-filled front bucket), move it to an empty column
+        // or swap it to the front of another column.
+        if (activeColors.isNotEmpty()) {
+            val currentFrontColors = columns.mapNotNull { it.bricks.firstOrNull()?.color }.toMutableSet()
+            val trappedLocations = mutableListOf<Pair<Int, Int>>()
+            for (cIdx in columns.indices) {
+                val col = columns[cIdx]
+                for (bIdx in 1 until col.bricks.size) {
+                    val b = col.bricks[bIdx]
+                    if (!isBrickLockedOrFinishing(b) &&
+                        activeColors.contains(b.color) &&
+                        !currentFrontColors.contains(b.color)
+                    ) {
+                        trappedLocations.add(Pair(cIdx, bIdx))
+                    }
+                }
+            }
+
+            for ((srcColIdx, _) in trappedLocations) {
+                val srcCol = columns[srcColIdx]
+                val bIdx = (1 until srcCol.bricks.size).firstOrNull { idx ->
+                    val b = srcCol.bricks[idx]
+                    !isBrickLockedOrFinishing(b) &&
+                        activeColors.contains(b.color) &&
+                        !currentFrontColors.contains(b.color)
+                } ?: continue
+
+                val emptyColIdx = columns.indices.firstOrNull { columns[it].bricks.isEmpty() }
+                if (emptyColIdx != null) {
+                    val rescued = srcCol.bricks.removeAt(bIdx)
+                    columns[emptyColIdx].bricks.add(0, rescued)
+                    currentFrontColors.add(rescued.color)
+                    swappedCols.add(srcColIdx)
+                    swappedCols.add(emptyColIdx)
+                    didSwap = true
+                    continue
+                }
+
+                // Prefer swapping with another column's non-matching filled==0 front brick
+                val targetColIdx = columns.indices.firstOrNull { dstIdx ->
+                    if (dstIdx == srcColIdx) return@firstOrNull false
+                    val dstFront = columns[dstIdx].bricks.firstOrNull() ?: return@firstOrNull false
+                    dstFront.filled == 0 && !isBrickLockedOrFinishing(dstFront) &&
+                        !activeColors.contains(dstFront.color)
+                } ?: columns.indices.firstOrNull { dstIdx ->
+                    if (dstIdx == srcColIdx) return@firstOrNull false
+                    val dstFront = columns[dstIdx].bricks.firstOrNull() ?: return@firstOrNull false
+                    dstFront.filled == 0 && !isBrickLockedOrFinishing(dstFront)
+                }
+
+                if (targetColIdx != null) {
+                    val dstCol = columns[targetColIdx]
+                    val rescued = srcCol.bricks[bIdx]
+                    val displaced = dstCol.bricks[0]
+                    srcCol.bricks[bIdx] = displaced
+                    dstCol.bricks[0] = rescued
+                    currentFrontColors.add(rescued.color)
+                    swappedCols.add(srcColIdx)
+                    swappedCols.add(targetColIdx)
+                    didSwap = true
+                    continue
+                }
+
+                // Last resort in same column if front is not inFlight (e.g. partially filled blocking last bucket)
+                val srcFront = srcCol.bricks.firstOrNull()
+                if (srcFront != null && !isBrickLockedOrFinishing(srcFront)) {
+                    val rescued = srcCol.bricks.removeAt(bIdx)
+                    srcCol.bricks.add(0, rescued)
+                    currentFrontColors.add(rescued.color)
+                    swappedCols.add(srcColIdx)
+                    didSwap = true
+                }
+            }
+        }
+
+        // 3. Fallback: rotate within multi-brick columns or swap differing front buckets
         if (!didSwap) {
             for (i in columns.indices) {
                 val col = columns[i]
-                if (canSwapFront(col)) {
+                if (canSwapFront(col) && !isBrickLockedOrFinishing(col.bricks[1]) && col.bricks[0].color != col.bricks[1].color) {
                     val temp = col.bricks[0]
                     col.bricks[0] = col.bricks[1]
                     col.bricks[1] = temp
@@ -216,9 +304,30 @@ object GameRules {
             }
         }
 
+        if (!didSwap) {
+            val swappableColIndices = columns.indices.filter { idx ->
+                val front = columns[idx].bricks.firstOrNull() ?: return@filter false
+                front.filled == 0 && !isBrickLockedOrFinishing(front)
+            }
+            if (swappableColIndices.size >= 2) {
+                val firstIdx = swappableColIndices[0]
+                val partnerIdx = swappableColIndices.drop(1).firstOrNull {
+                    columns[it].bricks[0].color != columns[firstIdx].bricks[0].color
+                }
+                if (partnerIdx != null) {
+                    val temp = columns[firstIdx].bricks[0]
+                    columns[firstIdx].bricks[0] = columns[partnerIdx].bricks[0]
+                    columns[partnerIdx].bricks[0] = temp
+                    swappedCols.add(firstIdx)
+                    swappedCols.add(partnerIdx)
+                    didSwap = true
+                }
+            }
+        }
+
         return ShuffleResult(
-            shuffled = didSwap || columns.any { it.bricks.isNotEmpty() },
-            swappedColumns = if (swappedCols.isNotEmpty()) swappedCols else listOf(0, 1, 2, 3).take(columns.size)
+            shuffled = didSwap,
+            swappedColumns = swappedCols.toList()
         )
     }
 
@@ -237,16 +346,73 @@ object GameRules {
 
         val assignments = mutableListOf<MagnetBallAssignment>()
 
-        // Candidate slots ordered bottom-to-top, center-out so returned containers are exposed & accessible
+        // Candidate slots ordered via BFS from EXIT_ROW (row 5) so every returned container
+        // stays clearable and never gets trapped behind WALLs or exhausted DISPENSERs.
         val colPriority = listOf(2, 3, 1, 4, 0, 5)
+        val neighbors = arrayOf(Pair(1, 0), Pair(-1, 0), Pair(0, 1), Pair(0, -1))
         val availableEmptySlots = ArrayDeque<Pair<Int, Int>>()
         val fallbackWallSlots = ArrayDeque<Pair<Int, Int>>()
-        for (r in GameConstants.GRID_ROWS - 1 downTo 0) {
+
+        val visitedEmpty = Array(GameConstants.GRID_ROWS) { BooleanArray(GameConstants.GRID_COLS) }
+        val bfsEmpty = ArrayDeque<Pair<Int, Int>>()
+        for (c in colPriority) {
+            val cell = grid[GameConstants.EXIT_ROW][c]
+            if (cell.kind == CellKind.EMPTY || cell.kind == CellKind.BLOCK) {
+                visitedEmpty[GameConstants.EXIT_ROW][c] = true
+                bfsEmpty.addLast(Pair(GameConstants.EXIT_ROW, c))
+            }
+        }
+        while (bfsEmpty.isNotEmpty()) {
+            val (r, c) = bfsEmpty.removeFirst()
+            if (grid[r][c].kind == CellKind.EMPTY) {
+                availableEmptySlots.addLast(Pair(r, c))
+            }
+            for ((dr, dc) in neighbors) {
+                val nr = r + dr
+                val nc = c + dc
+                if (nr in 0 until GameConstants.GRID_ROWS &&
+                    nc in 0 until GameConstants.GRID_COLS &&
+                    !visitedEmpty[nr][nc] &&
+                    (grid[nr][nc].kind == CellKind.EMPTY || grid[nr][nc].kind == CellKind.BLOCK)
+                ) {
+                    visitedEmpty[nr][nc] = true
+                    bfsEmpty.addLast(Pair(nr, nc))
+                }
+            }
+        }
+
+        // Fallback WALL slots also ordered outward from EXIT_ROW / reachable EMPTY cells
+        val visitedWall = Array(GameConstants.GRID_ROWS) { BooleanArray(GameConstants.GRID_COLS) }
+        val bfsWall = ArrayDeque<Pair<Int, Int>>()
+        for (r in 0 until GameConstants.GRID_ROWS) {
             for (c in colPriority) {
-                when (grid[r][c].kind) {
-                    CellKind.EMPTY -> availableEmptySlots.addLast(Pair(r, c))
-                    CellKind.WALL -> if (r >= 1) fallbackWallSlots.addLast(Pair(r, c))
-                    else -> Unit
+                if (visitedEmpty[r][c]) {
+                    visitedWall[r][c] = true
+                    bfsWall.addLast(Pair(r, c))
+                }
+            }
+        }
+        for (c in colPriority) {
+            if (!visitedWall[GameConstants.EXIT_ROW][c] && grid[GameConstants.EXIT_ROW][c].kind == CellKind.WALL) {
+                visitedWall[GameConstants.EXIT_ROW][c] = true
+                bfsWall.addLast(Pair(GameConstants.EXIT_ROW, c))
+            }
+        }
+        while (bfsWall.isNotEmpty()) {
+            val (r, c) = bfsWall.removeFirst()
+            if (grid[r][c].kind == CellKind.WALL) {
+                fallbackWallSlots.addLast(Pair(r, c))
+            }
+            for ((dr, dc) in neighbors) {
+                val nr = r + dr
+                val nc = c + dc
+                if (nr in 1 until GameConstants.GRID_ROWS &&
+                    nc in 0 until GameConstants.GRID_COLS &&
+                    !visitedWall[nr][nc] &&
+                    grid[nr][nc].kind == CellKind.WALL
+                ) {
+                    visitedWall[nr][nc] = true
+                    bfsWall.addLast(Pair(nr, nc))
                 }
             }
         }

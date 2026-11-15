@@ -161,9 +161,15 @@ fun GameBoardScreen(
         var viewOffsetX by remember { mutableFloatStateOf(0f) }
         var viewOffsetY by remember { mutableFloatStateOf(0f) }
         var viewArenaOffsetY by remember { mutableFloatStateOf(0f) }
-        val slotClipPath = remember { Path() }
-        val crateColNormX = remember { floatArrayOf(0.262f, 0.500f, 0.738f) }
-        val crateRowNormY = remember { floatArrayOf(0.276f, 0.493f, 0.710f) }
+        val crateColNormX = remember { floatArrayOf(0.258f, 0.500f, 0.742f) }
+        val crateRowNormY = remember { floatArrayOf(0.268f, 0.488f, 0.708f) }
+        val crateSlotMoods = remember {
+            arrayOf(
+                "happy_open", "content", "wink",
+                "curious", "happy_open", "eyes_closed",
+                "wink", "surprised", "content"
+            )
+        }
 
         // Game state models - generated cleanly per keyed board session
         val levelData = remember {
@@ -376,7 +382,8 @@ fun GameBoardScreen(
                                         duration = 0.18f,
                                         colIndex = match.matchedColIndex,
                                         holeIndex = match.targetHoleIndex,
-                                        mood = "happy_open"
+                                        mood = "happy_open",
+                                        targetBrick = col.bricks.firstOrNull()
                                     )
                                 )
                             }
@@ -394,26 +401,28 @@ fun GameBoardScreen(
                         if (drop.progress >= 1f) {
                             dropsToRemove.add(drop)
                             val col = columns[drop.colIndex]
-                            if (col.bricks.isNotEmpty()) {
-                                val topBrick = col.bricks[0]
-                                topBrick.inFlight = maxOf(0, topBrick.inFlight - 1)
-                                topBrick.filled++
+                            val targetBrick = drop.targetBrick?.takeIf { col.bricks.contains(it) }
+                                ?: col.bricks.firstOrNull { it.color == drop.color && it.filled < GameConstants.BRICK_HOLES }
+                                ?: col.bricks.firstOrNull()
+                            if (targetBrick != null) {
+                                targetBrick.inFlight = maxOf(0, targetBrick.inFlight - 1)
+                                targetBrick.filled++
                                 col.lightPulseTimer = 0.65f
 
-                                when (topBrick.filled) {
+                                when (targetBrick.filled) {
                                     1 -> {
-                                        topBrick.animState = "hit_1"
-                                        topBrick.animTimer = 0f
+                                        targetBrick.animState = "hit_1"
+                                        targetBrick.animTimer = 0f
                                         SoundManager.playDropHole(0)
                                     }
                                     2 -> {
-                                        topBrick.animState = "hit_2"
-                                        topBrick.animTimer = 0f
+                                        targetBrick.animState = "hit_2"
+                                        targetBrick.animTimer = 0f
                                         SoundManager.playDropHole(1)
                                     }
                                     else -> {
-                                        topBrick.animState = "hit_3"
-                                        topBrick.animTimer = 0f
+                                        targetBrick.animState = "hit_3"
+                                        targetBrick.animTimer = 0f
                                         SoundManager.playDropHole(2)
                                     }
                                 }
@@ -427,6 +436,14 @@ fun GameBoardScreen(
                         val bricksToRemove = mutableListOf<Brick>()
                         for (bIdx in col.bricks.indices) {
                             val brick = col.bricks[bIdx]
+                            if (brick.filled >= GameConstants.BRICK_HOLES &&
+                                brick.animState != "hit_3" &&
+                                brick.animState != "hold_full" &&
+                                brick.animState != "vanish"
+                            ) {
+                                brick.animState = "hit_3"
+                                brick.animTimer = 0f
+                            }
                             when (brick.animState) {
                                 "activate", "hit_1", "hit_2" -> {
                                     brick.animTimer += dt
@@ -493,13 +510,24 @@ fun GameBoardScreen(
                             val frontRemoved = col.bricks.firstOrNull() in bricksToRemove
                             col.bricks.removeAll(bricksToRemove)
                             if (frontRemoved && col.bricks.isNotEmpty()) {
-                                col.bricks[0].animState = "activate"
-                                col.bricks[0].animTimer = 0f
+                                val nextFront = col.bricks[0]
+                                if (nextFront.filled < GameConstants.BRICK_HOLES && nextFront.animState == "idle") {
+                                    nextFront.animState = "activate"
+                                    nextFront.animTimer = 0f
+                                }
                             }
                             if (GameRules.isLevelWon(columns)) {
                                 gameState = "won"
                             }
                         }
+                    }
+
+                    if (gameState == "playing" &&
+                        GameRules.isLevelWon(columns) &&
+                        droppingBalls.isEmpty() &&
+                        cannonProjectiles.isEmpty()
+                    ) {
+                        gameState = "won"
                     }
 
                     // Update flying fluffy celebration effects when bucket clears
@@ -970,8 +998,11 @@ fun GameBoardScreen(
                     for (colIdx in result.swappedColumns) {
                         val col = columns.getOrNull(colIdx) ?: continue
                         if (col.bricks.isNotEmpty()) {
-                            col.bricks[0].animState = "activate"
-                            col.bricks[0].animTimer = 0f
+                            val front = col.bricks[0]
+                            if (front.filled < GameConstants.BRICK_HOLES && front.animState == "idle") {
+                                front.animState = "activate"
+                                front.animTimer = 0f
+                            }
                         }
                         for (sp in 0 until 6) {
                             particles.add(
@@ -1000,7 +1031,7 @@ fun GameBoardScreen(
 
         // Cannon Booster hitbox: x in 178..238, y in 598..660
         if (arenaGameX > 178f && arenaGameX <= 238f && arenaGameY in 598f..660f) {
-            if (cannonCount > 0 && beltBalls.isNotEmpty() && !isCannonActive) {
+            if (cannonCount > 0 && beltBalls.isNotEmpty() && magnetReturningBalls.isEmpty() && !isCannonActive) {
                 val assignments = GameRules.planCannonBlast(columns, beltBalls.toList())
                 if (assignments.isNotEmpty()) {
                     cannonCount = (cannonCount - 1).coerceAtLeast(0)
@@ -1313,38 +1344,23 @@ fun GameBoardScreen(
                                 }
                                 val seatedCount = cell.ballCount.coerceIn(0, GameConstants.BALLS_PER_BLOCK)
                                 if (seatedCount > 0) {
-                                    if (crateFullBmp != null) {
-                                        val clipR = 0.123f * minOf(scaledW, scaledH)
-                                        for (slotIdx in 0 until seatedCount) {
-                                            val sRow = slotIdx / 3
-                                            val sCol = slotIdx % 3
-                                            val slotCx = dstRect.left + crateColNormX[sCol] * scaledW
-                                            val slotCy = dstRect.top + crateRowNormY[sRow] * scaledH
-                                            canvas.save()
-                                            slotClipPath.reset()
-                                            slotClipPath.addCircle(slotCx, slotCy, clipR, Path.Direction.CW)
-                                            canvas.clipPath(slotClipPath)
-                                            canvas.drawBitmap(crateFullBmp, null, dstRect, null)
-                                            canvas.restore()
-                                        }
-                                    } else {
-                                        val ballBmp = AssetLoader.getBall(context, col)
-                                            ?: AssetLoader.getFluffy(context, col, "content")
-                                        if (ballBmp != null) {
-                                            val brX = 4.6f * cell.scaleX
-                                            val brY = 4.6f * cell.scaleY
-                                            for (slotIdx in 0 until seatedCount) {
-                                                val sRow = slotIdx / 3
-                                                val sCol = slotIdx % 3
-                                                val bx = dstRect.left + crateColNormX[sCol] * scaledW
-                                                val by = dstRect.top + crateRowNormY[sRow] * scaledH
-                                                canvas.drawBitmap(
-                                                    ballBmp,
-                                                    null,
-                                                    RectF(bx - brX, by - brY, bx + brX, by + brY),
-                                                    null
-                                                )
-                                            }
+                                    val brX = scaledW * 0.153f
+                                    val brY = scaledH * 0.156f
+                                    for (sRow in 0..2) {
+                                        for (sCol in intArrayOf(0, 2, 1)) {
+                                            val slotIdx = sRow * 3 + sCol
+                                            if (slotIdx >= seatedCount) continue
+                                            val slotBmp = AssetLoader.getFluffy(context, col, crateSlotMoods[slotIdx])
+                                                ?: AssetLoader.getBall(context, col)
+                                                ?: continue
+                                            val bx = dstRect.left + crateColNormX[sCol] * scaledW
+                                            val by = dstRect.top + crateRowNormY[sRow] * scaledH
+                                            canvas.drawBitmap(
+                                                slotBmp,
+                                                null,
+                                                RectF(bx - brX, by - brY, bx + brX, by + brY),
+                                                null
+                                            )
                                         }
                                     }
                                 }
@@ -1850,7 +1866,7 @@ fun GameBoardScreen(
 
                     val (curX, curY) = bezierAt(e)
                     val startR = GameConstants.BALL_RADIUS_BELT * 1.35f
-                    val endR = 0.123f * 33f
+                    val endR = 0.154f * 33f
                     val curR = startR + (endR - startR) * e
 
                     // Soft cyan aura around flying ball
@@ -1863,8 +1879,8 @@ fun GameBoardScreen(
                         AssetLoader.getFluffy(context, mb.color, "happy_open")
                             ?: AssetLoader.getBall(context, mb.color)
                     } else {
-                        AssetLoader.getBall(context, mb.color)
-                            ?: AssetLoader.getFluffy(context, mb.color, "content")
+                        AssetLoader.getFluffy(context, mb.color, "content")
+                            ?: AssetLoader.getBall(context, mb.color)
                     }
                     if (sprite != null) {
                         canvas.drawBitmap(

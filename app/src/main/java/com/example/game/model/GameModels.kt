@@ -128,7 +128,8 @@ data class DroppingBall(
     val duration: Float = 0.18f,
     val colIndex: Int,
     val holeIndex: Int,
-    var mood: String = "happy_open"
+    var mood: String = "happy_open",
+    val targetBrick: Brick? = null
 )
 
 enum class ParticleShape {
