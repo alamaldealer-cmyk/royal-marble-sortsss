@@ -79,8 +79,10 @@ fun OutOfLivesModal(
     val closeXBmp = remember { AssetLoader.loadBitmap(context, "cleanup/btn_close_x.png") }
     val heartBmp = remember { AssetLoader.loadBitmap(context, "hud/hud_heart.png") }
     val coinBmp = remember { AssetLoader.loadBitmap(context, "hud/hud_coin.png") }
+    val coinsBtnBmp = remember { AssetLoader.loadBitmap(context, "hud/btn_lives_900_coins.png") }
+    val watchAdBtnBmp = remember { AssetLoader.loadBitmap(context, "hud/btn_lives_watch_ad.png") }
 
-    val modalScale = remember { Animatable(0.82f) }
+    val modalScale = remember { Animatable(0.90f) }
     val modalAlpha = remember { Animatable(0.15f) }
     var isWatchingAd by remember { mutableStateOf(false) }
     var insufficientCoinsTick by remember { mutableIntStateOf(0) }
@@ -93,13 +95,13 @@ fun OutOfLivesModal(
     }
 
     LaunchedEffect(Unit) {
-        launch { modalAlpha.animateTo(1f, tween(160)) }
+        launch { modalAlpha.animateTo(1f, tween(140)) }
         launch {
             modalScale.animateTo(
                 targetValue = 1f,
                 animationSpec = spring(
-                    dampingRatio = 0.65f,
-                    stiffness = Spring.StiffnessMediumLow
+                    dampingRatio = 0.72f,
+                    stiffness = Spring.StiffnessMedium
                 )
             )
         }
@@ -208,15 +210,15 @@ fun OutOfLivesModal(
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
-                            .padding(end = 8.dp)
-                            .size(48.dp)
+                            .padding(end = 4.dp)
+                            .size(52.dp)
                             .minimumInteractiveComponentSize()
-                            .bouncyScale(closePress)
                             .testTag("out_of_lives_close_button")
                             .bouncyClickTarget(closePress, role = Role.Button) {
                                 SoundManager.playTap()
                                 onDismiss()
-                            },
+                            }
+                            .bouncyScale(closePress),
                         contentAlignment = Alignment.Center
                     ) {
                         if (closeXBmp != null) {
@@ -332,64 +334,14 @@ fun OutOfLivesModal(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Watch Ad (+1 Life)
-                            val adPress = rememberBouncyPressState(pressedScale = 0.90f)
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(54.dp)
-                                    .minimumInteractiveComponentSize()
-                                    .bouncyScale(adPress)
-                                    .shadow(4.dp, RoundedCornerShape(16.dp))
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(
-                                        Brush.verticalGradient(
-                                            listOf(Color(0xFFFFD83B), Color(0xFFF59E0B))
-                                        )
-                                    )
-                                    .border(2.5.dp, Color(0xFF78350F), RoundedCornerShape(16.dp))
-                                    .testTag("out_of_lives_watch_ad_button")
-                                    .bouncyClickTarget(adPress, role = Role.Button) {
-                                        SoundManager.playTap()
-                                        isWatchingAd = true
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = "+1 Life",
-                                        fontFamily = FredokaFontFamily,
-                                        fontWeight = FontWeight.Black,
-                                        fontSize = 14.sp,
-                                        color = Color(0xFF4A1D05)
-                                    )
-                                    Text(
-                                        text = "Watch Ad",
-                                        fontFamily = FredokaFontFamily,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.5.sp,
-                                        color = Color(0xFF6B2D08)
-                                    )
-                                }
-                            }
-
-                            // Refill All (900 Coins)
+                            // Refill Full (900 Coins -> +5 Lives)
                             val coinsPress = rememberBouncyPressState(pressedScale = 0.90f)
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .offset { IntOffset(x = coinsShakeOffset.value.roundToInt(), y = 0) }
-                                    .height(54.dp)
+                                    .aspectRatio(253f / 118f)
                                     .minimumInteractiveComponentSize()
-                                    .bouncyScale(coinsPress)
-                                    .shadow(4.dp, RoundedCornerShape(16.dp))
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(
-                                        Brush.verticalGradient(
-                                            listOf(Color(0xFF4ADE80), Color(0xFF16A34A))
-                                        )
-                                    )
-                                    .border(2.5.dp, Color(0xFF064E3B), RoundedCornerShape(16.dp))
                                     .testTag("out_of_lives_coins_button")
                                     .bouncyClickTarget(coinsPress, role = Role.Button) {
                                         if (coins >= LivesManager.REFILL_COIN_COST) {
@@ -399,35 +351,97 @@ fun OutOfLivesModal(
                                             SoundManager.playBlocked()
                                             insufficientCoinsTick++
                                         }
-                                    },
+                                    }
+                                    .bouncyScale(coinsPress),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = "Refill Full",
-                                        fontFamily = FredokaFontFamily,
-                                        fontWeight = FontWeight.Black,
-                                        fontSize = 14.sp,
-                                        color = Color.White
+                                if (coinsBtnBmp != null) {
+                                    Image(
+                                        bitmap = coinsBtnBmp.asImageBitmap(),
+                                        contentDescription = "Refill Full Lives for ${LivesManager.REFILL_COIN_COST} Coins",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Fit
                                     )
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .shadow(4.dp, RoundedCornerShape(16.dp))
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    listOf(Color(0xFF4ADE80), Color(0xFF16A34A))
+                                                )
+                                            )
+                                            .border(2.5.dp, Color(0xFF064E3B), RoundedCornerShape(16.dp)),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Text(
-                                            text = "${LivesManager.REFILL_COIN_COST}",
-                                            fontFamily = FredokaFontFamily,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.5.sp,
-                                            color = Color.White
-                                        )
-                                        if (coinBmp != null) {
-                                            Image(
-                                                bitmap = coinBmp.asImageBitmap(),
-                                                contentDescription = null,
-                                                modifier = Modifier.size(13.dp)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            if (coinBmp != null) {
+                                                Image(
+                                                    bitmap = coinBmp.asImageBitmap(),
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                            Text(
+                                                text = "${LivesManager.REFILL_COIN_COST} (+${LivesManager.MAX_LIVES})",
+                                                fontFamily = FredokaFontFamily,
+                                                fontWeight = FontWeight.Black,
+                                                fontSize = 14.sp,
+                                                color = Color.White
                                             )
                                         }
+                                    }
+                                }
+                            }
+
+                            // Watch Ad (Free -> +3 Lives)
+                            val adPress = rememberBouncyPressState(pressedScale = 0.90f)
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(253f / 118f)
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("out_of_lives_watch_ad_button")
+                                    .bouncyClickTarget(adPress, role = Role.Button) {
+                                        SoundManager.playTap()
+                                        isWatchingAd = true
+                                    }
+                                    .bouncyScale(adPress),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (watchAdBtnBmp != null) {
+                                    Image(
+                                        bitmap = watchAdBtnBmp.asImageBitmap(),
+                                        contentDescription = "Watch Ad for +${LivesManager.AD_REWARD_LIVES} Lives",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .shadow(4.dp, RoundedCornerShape(16.dp))
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    listOf(Color(0xFFE846FF), Color(0xFFB312DC))
+                                                )
+                                            )
+                                            .border(2.5.dp, Color(0xFFFFD54F), RoundedCornerShape(16.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "Free (+${LivesManager.AD_REWARD_LIVES})",
+                                            fontFamily = FredokaFontFamily,
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 14.sp,
+                                            color = Color.White
+                                        )
                                     }
                                 }
                             }
@@ -448,7 +462,7 @@ fun OutOfLivesModal(
                         .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "Need 900 coins! Watch Ad for +1 Life",
+                        text = "Need 900 coins! Watch Ad for +${LivesManager.AD_REWARD_LIVES} Lives",
                         fontFamily = FredokaFontFamily,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
@@ -498,7 +512,7 @@ fun OutOfLivesModal(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Getting +1 Life...",
+                        text = "Getting +${LivesManager.AD_REWARD_LIVES} Lives...",
                         fontFamily = FredokaFontFamily,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp,

@@ -684,4 +684,90 @@ class ExampleUnitTest {
         assertEquals(0L, refilledAll.nextRefillAtMs)
         assertEquals("Full", LivesManager.formatStatusText(refilledAll))
     }
+
+    @Test
+    fun livesManager_watchAdAddsThreeLivesAndCapsAtMax() {
+        val t0 = 5_000_000L
+        val targetAt = t0 + 12L * 60L * 1000L // 12:00 remaining
+
+        assertEquals(3, LivesManager.AD_REWARD_LIVES)
+
+        // 0 -> 3 lives, preserves remaining 20-min refill countdown
+        val fromZero = LivesManager.addLives(0, targetAt, t0, LivesManager.AD_REWARD_LIVES)
+        assertEquals(3, fromZero.lives)
+        assertEquals(targetAt, fromZero.nextRefillAtMs)
+        assertEquals("12:00", LivesManager.formatStatusText(fromZero))
+
+        // 1 -> 4 lives, preserves remaining refill countdown
+        val fromOne = LivesManager.addLives(1, targetAt, t0, LivesManager.AD_REWARD_LIVES)
+        assertEquals(4, fromOne.lives)
+        assertEquals(targetAt, fromOne.nextRefillAtMs)
+
+        // 2 -> 5 lives (Full), clears timer
+        val fromTwo = LivesManager.addLives(2, targetAt, t0, LivesManager.AD_REWARD_LIVES)
+        assertEquals(5, fromTwo.lives)
+        assertEquals(0L, fromTwo.nextRefillAtMs)
+        assertEquals("Full", LivesManager.formatStatusText(fromTwo))
+
+        // 4 -> 5 lives (capped at MAX_LIVES), clears timer
+        val fromFour = LivesManager.addLives(4, targetAt, t0, LivesManager.AD_REWARD_LIVES)
+        assertEquals(5, fromFour.lives)
+        assertEquals(0L, fromFour.nextRefillAtMs)
+    }
+
+    @Test
+    fun jackpotEventManager_runs24HourCycleAndResetsAfter24Hours() {
+        val t0 = 10_000_000L
+        val initial = com.example.game.jackpot.JackpotEventManager.reconcile(0, 0L, t0)
+        assertEquals(0, initial.claimedSteps)
+        assertEquals(5, initial.remainingSteps)
+        assertEquals(t0 + com.example.game.jackpot.JackpotEventManager.CYCLE_DURATION_MS, initial.cycleEndAtMs)
+        assertEquals(
+            "24:00:00",
+            com.example.game.jackpot.JackpotEventManager.formatCountdownTimer(initial.remainingMs)
+        )
+
+        // Claim all 5 tiers (50, 100, 200, 400, 800) within the same 24h cycle
+        var state = initial
+        for (i in 1..5) {
+            state = com.example.game.jackpot.JackpotEventManager.claimNextStep(
+                claimedSteps = state.claimedSteps,
+                cycleEndAtMs = state.cycleEndAtMs,
+                nowMs = t0 + i * 1000L
+            )
+            assertEquals(i, state.claimedSteps)
+        }
+        assertEquals(true, state.allClaimed)
+        assertEquals(0, state.remainingSteps)
+        assertEquals(
+            "23:59:55",
+            com.example.game.jackpot.JackpotEventManager.formatCountdownTimer(state.remainingMs)
+        )
+
+        // Before 24h completes -> remains allClaimed
+        val before24h = com.example.game.jackpot.JackpotEventManager.reconcile(
+            claimedSteps = state.claimedSteps,
+            cycleEndAtMs = state.cycleEndAtMs,
+            nowMs = state.cycleEndAtMs - 5_000L
+        )
+        assertEquals(true, before24h.allClaimed)
+        assertEquals(
+            "00:00:05",
+            com.example.game.jackpot.JackpotEventManager.formatCountdownTimer(before24h.remainingMs)
+        )
+
+        // Once 24 real hours pass -> resets back to 0 claimed (50 Free + Ads available again)
+        val after24h = com.example.game.jackpot.JackpotEventManager.reconcile(
+            claimedSteps = state.claimedSteps,
+            cycleEndAtMs = state.cycleEndAtMs,
+            nowMs = state.cycleEndAtMs
+        )
+        assertEquals(0, after24h.claimedSteps)
+        assertEquals(false, after24h.allClaimed)
+        assertEquals(5, after24h.remainingSteps)
+        assertEquals(
+            state.cycleEndAtMs + com.example.game.jackpot.JackpotEventManager.CYCLE_DURATION_MS,
+            after24h.cycleEndAtMs
+        )
+    }
 }

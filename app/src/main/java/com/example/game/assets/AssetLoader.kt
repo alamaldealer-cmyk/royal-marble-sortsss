@@ -125,11 +125,18 @@ object AssetLoader {
             "hud/hud_bar_coin.png",
             "hud/hud_coin.png",
             "hud/hud_heart.png",
-            "hud/hud_plus.png"
+            "hud/hud_plus.png",
+            "hud/btn_lives_900_coins.png",
+            "hud/btn_lives_watch_ad.png"
         )
         for (path in criticalAssets) {
             loadBitmap(context, path)
         }
+
+        for (i in 0 until 16) {
+            loadBitmap(context, "home_event/coin_dome_$i.png")
+        }
+        loadBitmap(context, "jackpot_tower/btn_free_coins_ad.png")
 
         val logoAssets = listOf(
             "logo/wood_plaque.png",
@@ -394,5 +401,14 @@ object AssetLoader {
     fun getCannonSmokeFrame(context: Context, frameIndex: Int): Bitmap? {
         val idx = frameIndex.coerceIn(0, 3)
         return loadBitmap(context, "powerups/cannon_smoke_$idx.png")
+    }
+
+    fun getCoinDomeFrame(context: Context, frameIndex: Int): Bitmap? {
+        val idx = frameIndex.coerceIn(0, 15)
+        return loadBitmap(context, "home_event/coin_dome_$idx.png")
+    }
+
+    fun getJackpotWatchAdButton(context: Context): Bitmap? {
+        return loadBitmap(context, "jackpot_tower/btn_free_coins_ad.png")
     }
 }

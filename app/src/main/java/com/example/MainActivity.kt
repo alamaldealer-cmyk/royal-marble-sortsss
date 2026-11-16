@@ -32,6 +32,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.game.assets.AssetLoader
+import com.example.game.jackpot.JackpotEventManager
+import com.example.game.jackpot.JackpotEventSnapshot
 import com.example.game.lives.LifeSnapshot
 import com.example.game.lives.LivesManager
 import com.example.game.sound.SoundManager
@@ -74,6 +76,10 @@ fun RoyalMarblesApp() {
 
     var coins by remember {
         mutableIntStateOf(prefs.getInt("coins", 19330))
+    }
+
+    var jackpotSnapshot by remember {
+        mutableStateOf(JackpotEventManager.load(prefs))
     }
 
     var lifeSnapshot by remember {
@@ -131,11 +137,12 @@ fun RoyalMarblesApp() {
         LivesManager.save(prefs, updated)
     }
 
-    fun gainOneLife() {
-        val updated = LivesManager.addOneLife(
+    fun gainAdLives() {
+        val updated = LivesManager.addLives(
             lives = lifeSnapshot.lives,
             nextRefillAtMs = lifeSnapshot.nextRefillAtMs,
-            nowMs = System.currentTimeMillis()
+            nowMs = System.currentTimeMillis(),
+            count = LivesManager.AD_REWARD_LIVES
         )
         lifeSnapshot = updated
         LivesManager.save(prefs, updated)
@@ -145,6 +152,48 @@ fun RoyalMarblesApp() {
         val updated = LivesManager.refillAllLives()
         lifeSnapshot = updated
         LivesManager.save(prefs, updated)
+    }
+
+    fun saveCoins(newCoins: Int) {
+        coins = newCoins
+        prefs.edit().putInt("coins", newCoins).apply()
+    }
+
+    fun refreshJackpot(nowMs: Long = System.currentTimeMillis()): JackpotEventSnapshot {
+        val updated = JackpotEventManager.reconcile(
+            claimedSteps = jackpotSnapshot.claimedSteps,
+            cycleEndAtMs = jackpotSnapshot.cycleEndAtMs,
+            nowMs = nowMs
+        )
+        if (updated.claimedSteps != jackpotSnapshot.claimedSteps ||
+            updated.cycleEndAtMs != jackpotSnapshot.cycleEndAtMs
+        ) {
+            JackpotEventManager.save(prefs, updated)
+        }
+        if (updated != jackpotSnapshot) {
+            jackpotSnapshot = updated
+        }
+        return updated
+    }
+
+    fun claimNextJackpotTier(rewardCoins: Int) {
+        val nowMs = System.currentTimeMillis()
+        val updated = JackpotEventManager.claimNextStep(
+            claimedSteps = jackpotSnapshot.claimedSteps,
+            cycleEndAtMs = jackpotSnapshot.cycleEndAtMs,
+            nowMs = nowMs
+        )
+        jackpotSnapshot = updated
+        JackpotEventManager.save(prefs, updated)
+        saveCoins(coins + rewardCoins)
+    }
+
+    // 1-second live 24-hour Jackpot timer ticker & automatic reset after 24 hours
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000L)
+            refreshJackpot()
+        }
     }
 
     // 1-second live countdown ticker while lives < 5
@@ -183,6 +232,7 @@ fun RoyalMarblesApp() {
                 Lifecycle.Event.ON_RESUME -> {
                     SoundManager.onAppResumed(context)
                     refreshLives()
+                    refreshJackpot()
                 }
                 else -> Unit
             }
@@ -197,11 +247,6 @@ fun RoyalMarblesApp() {
     LaunchedEffect(Unit) {
         SoundManager.init(context)
         AssetLoader.preloadBitmaps(context)
-    }
-
-    fun saveCoins(newCoins: Int) {
-        coins = newCoins
-        prefs.edit().putInt("coins", newCoins).apply()
     }
 
     fun saveLevel(newLevel: Int) {
@@ -316,8 +361,13 @@ fun RoyalMarblesApp() {
                         vibrationEnabled = vibrationEnabled,
                         onStartGame = { startPlayingWithOptionalStory(currentLevel) },
                         onOpenColorTest = { currentView = "color_test" },
+                        jackpotSnapshot = jackpotSnapshot,
+                        jackpotClaimedSteps = jackpotSnapshot.claimedSteps,
+                        onClaimJackpotReward = { rewardCoins ->
+                            claimNextJackpotTier(rewardCoins)
+                        },
                         onAddCoins = { amount -> saveCoins(coins + amount) },
-                        onWatchAdForLife = { gainOneLife() },
+                        onWatchAdForLife = { gainAdLives() },
                         onRefillLivesWithCoins = {
                             if (coins >= LivesManager.REFILL_COIN_COST) {
                                 saveCoins(coins - LivesManager.REFILL_COIN_COST)

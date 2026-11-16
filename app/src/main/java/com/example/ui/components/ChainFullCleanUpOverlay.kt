@@ -332,18 +332,18 @@ fun ChainFullCleanUpOverlay(
                         y = quitTopPx.roundToInt().coerceAtLeast(0)
                     )
                 }
-                .graphicsLayer {
-                    alpha = quitRevealProgress.value
-                }
                 .width(with(density) { quitWidthPx.toDp() })
                 .aspectRatio(2174f / 1231f)
                 .minimumInteractiveComponentSize()
-                .bouncyScale(quitPress)
                 .testTag("cleanup_quit_button")
                 .bouncyClickTarget(quitPress, role = Role.Button) {
                     SoundManager.playTap()
                     showOutOfSpaceModal = true
-                },
+                }
+                .graphicsLayer {
+                    alpha = quitRevealProgress.value
+                }
+                .bouncyScale(quitPress),
             contentAlignment = Alignment.Center
         ) {
             if (quitBmp != null) {
@@ -380,6 +380,13 @@ fun ChainFullCleanUpOverlay(
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .aspectRatio(2529f / 1315f)
+                    .minimumInteractiveComponentSize()
+                    .testTag("cleanup_watch_ad_button")
+                    .bouncyClickTarget(watchAdPress, role = Role.Button) {
+                        SoundManager.playTap()
+                        isWatchingAd = true
+                    }
                     .graphicsLayer {
                         val s = watchAdIntroScale.value * watchAdNudgeScale.value
                         scaleX = s
@@ -387,14 +394,7 @@ fun ChainFullCleanUpOverlay(
                         alpha = buttonsIntroAlpha.value
                         translationY = with(density) { watchAdNudgeY.value.dp.toPx() }
                     }
-                    .aspectRatio(2529f / 1315f)
-                    .minimumInteractiveComponentSize()
-                    .bouncyScale(watchAdPress)
-                    .testTag("cleanup_watch_ad_button")
-                    .bouncyClickTarget(watchAdPress, role = Role.Button) {
-                        SoundManager.playTap()
-                        isWatchingAd = true
-                    },
+                    .bouncyScale(watchAdPress),
                 contentAlignment = Alignment.Center
             ) {
                 if (watchAdBmp != null) {
@@ -422,16 +422,8 @@ fun ChainFullCleanUpOverlay(
                 modifier = Modifier
                     .weight(1f)
                     .offset { IntOffset(x = coinsShakeOffset.value.roundToInt(), y = 0) }
-                    .graphicsLayer {
-                        val s = coinsIntroScale.value * coinsNudgeScale.value
-                        scaleX = s
-                        scaleY = s
-                        alpha = buttonsIntroAlpha.value
-                        translationY = with(density) { coinsNudgeY.value.dp.toPx() }
-                    }
                     .aspectRatio(2534f / 1315f)
                     .minimumInteractiveComponentSize()
-                    .bouncyScale(coinsPress)
                     .testTag("cleanup_coins_button")
                     .bouncyClickTarget(coinsPress, role = Role.Button) {
                         if (coins >= CLEAN_UP_COIN_COST) {
@@ -441,7 +433,15 @@ fun ChainFullCleanUpOverlay(
                             SoundManager.playBlocked()
                             insufficientCoinsTick++
                         }
-                    },
+                    }
+                    .graphicsLayer {
+                        val s = coinsIntroScale.value * coinsNudgeScale.value
+                        scaleX = s
+                        scaleY = s
+                        alpha = buttonsIntroAlpha.value
+                        translationY = with(density) { coinsNudgeY.value.dp.toPx() }
+                    }
+                    .bouncyScale(coinsPress),
                 contentAlignment = Alignment.Center
             ) {
                 if (coinsBtnBmp != null) {
@@ -620,12 +620,12 @@ private fun WatchingRewardedAdDialog(
             Box(
                 modifier = Modifier
                     .minimumInteractiveComponentSize()
-                    .bouncyScale(cancelPress)
                     .clip(RoundedCornerShape(16.dp))
                     .background(Color(0xFF334155))
                     .border(1.5.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
                     .testTag("rewarded_ad_cancel_button")
                     .bouncyClickTarget(cancelPress, role = Role.Button, onClick = onCancel)
+                    .bouncyScale(cancelPress)
                     .padding(horizontal = 20.dp, vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {

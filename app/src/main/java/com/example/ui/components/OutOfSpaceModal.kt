@@ -99,7 +99,7 @@ fun OutOfSpaceModal(
     val watchAdBmp = remember { AssetLoader.loadBitmap(context, "cleanup/btn_play_on_watch_ad.png") }
     val coinsBtnBmp = remember { AssetLoader.loadBitmap(context, "cleanup/btn_play_on_coins.png") }
 
-    val modalScale = remember { Animatable(0.80f) }
+    val modalScale = remember { Animatable(0.90f) }
     val modalAlpha = remember { Animatable(0.15f) }
 
     var insufficientCoinsTick by remember { mutableIntStateOf(0) }
@@ -108,14 +108,14 @@ fun OutOfSpaceModal(
 
     LaunchedEffect(Unit) {
         launch {
-            modalAlpha.animateTo(1f, tween(durationMillis = 160))
+            modalAlpha.animateTo(1f, tween(durationMillis = 140))
         }
         launch {
             modalScale.animateTo(
                 targetValue = 1f,
                 animationSpec = spring(
-                    dampingRatio = 0.65f,
-                    stiffness = Spring.StiffnessMediumLow
+                    dampingRatio = 0.72f,
+                    stiffness = Spring.StiffnessMedium
                 )
             )
         }
@@ -206,15 +206,15 @@ fun OutOfSpaceModal(
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterEnd)
-                            .padding(end = 8.dp)
-                            .size(48.dp)
+                            .padding(end = 4.dp)
+                            .size(52.dp)
                             .minimumInteractiveComponentSize()
-                            .bouncyScale(closePress)
                             .testTag("out_of_space_close_button")
                             .bouncyClickTarget(closePress, role = Role.Button) {
                                 SoundManager.playTap()
                                 onCloseToHome()
-                            },
+                            }
+                            .bouncyScale(closePress),
                         contentAlignment = Alignment.Center
                     ) {
                         if (closeXBmp != null) {
@@ -281,12 +281,12 @@ fun OutOfSpaceModal(
                                 .weight(1f)
                                 .aspectRatio(2584f / 1793f)
                                 .minimumInteractiveComponentSize()
-                                .bouncyScale(watchAdPress)
                                 .testTag("out_of_space_watch_ad_button")
                                 .bouncyClickTarget(watchAdPress, role = Role.Button) {
                                     SoundManager.playTap()
                                     onWatchAdPlayOn()
-                                },
+                                }
+                                .bouncyScale(watchAdPress),
                             contentAlignment = Alignment.Center
                         ) {
                             if (watchAdBmp != null) {
@@ -316,7 +316,6 @@ fun OutOfSpaceModal(
                                 .offset { IntOffset(x = coinsShakeOffset.value.roundToInt(), y = 0) }
                                 .aspectRatio(2481f / 1738f)
                                 .minimumInteractiveComponentSize()
-                                .bouncyScale(coinsPress)
                                 .testTag("out_of_space_coins_button")
                                 .bouncyClickTarget(coinsPress, role = Role.Button) {
                                     if (coins >= CLEAN_UP_COIN_COST) {
@@ -326,7 +325,8 @@ fun OutOfSpaceModal(
                                         SoundManager.playBlocked()
                                         insufficientCoinsTick++
                                     }
-                                },
+                                }
+                                .bouncyScale(coinsPress),
                             contentAlignment = Alignment.Center
                         ) {
                             if (coinsBtnBmp != null) {

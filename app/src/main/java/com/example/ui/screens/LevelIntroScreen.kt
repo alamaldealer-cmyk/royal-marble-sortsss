@@ -264,10 +264,6 @@ fun LevelIntroScreen(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(16.dp)
-                .bouncyScale(skipPress)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xCC000000))
-                .border(2.dp, Color(0xFFFFD700), RoundedCornerShape(16.dp))
                 .bouncyClickTarget(skipPress) {
                     if (!isSkipping) {
                         isSkipping = true
@@ -275,6 +271,10 @@ fun LevelIntroScreen(
                         onComplete()
                     }
                 }
+                .bouncyScale(skipPress)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xCC000000))
+                .border(2.dp, Color(0xFFFFD700), RoundedCornerShape(16.dp))
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text(

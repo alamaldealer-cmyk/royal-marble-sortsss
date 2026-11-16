@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.core.content.res.ResourcesCompat
 import com.example.R
@@ -3312,12 +3313,12 @@ fun GameBoardScreen(
                     contentDescription = "Pause",
                     modifier = Modifier
                         .size(50.dp, 54.dp)
-                        .bouncyScale(pausePress)
                         .testTag("pause_button")
                         .bouncyClickTarget(pausePress) {
                             SoundManager.playTap()
                             isPaused = true
                         }
+                        .bouncyScale(pausePress)
                 )
             } else {
                 Spacer(modifier = Modifier.size(50.dp, 54.dp))
@@ -3443,16 +3444,24 @@ private fun PauseMenuDialog(
 
             if (closeBmp != null) {
                 val closePress = rememberBouncyPressState(pressedScale = 0.85f)
-                Image(
-                    bitmap = closeBmp.asImageBitmap(),
-                    contentDescription = "Close",
+                Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(top = 18.dp, end = 20.dp)
-                        .size(32.dp)
-                        .bouncyScale(closePress)
-                        .bouncyClickTarget(closePress) { onDismiss() }
-                )
+                        .padding(top = 10.dp, end = 12.dp)
+                        .size(48.dp)
+                        .bouncyClickTarget(closePress, role = Role.Button) {
+                            SoundManager.playTap()
+                            onDismiss()
+                        }
+                        .bouncyScale(closePress),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        bitmap = closeBmp.asImageBitmap(),
+                        contentDescription = "Close",
+                        modifier = Modifier.size(34.dp)
+                    )
+                }
             }
 
             Column(
@@ -3469,8 +3478,8 @@ private fun PauseMenuDialog(
                         modifier = Modifier
                             .width(170.dp)
                             .height(44.dp)
-                            .bouncyScale(resumePress)
                             .bouncyClickTarget(resumePress) { onDismiss() }
+                            .bouncyScale(resumePress)
                     )
                 }
 
@@ -3482,8 +3491,8 @@ private fun PauseMenuDialog(
                         modifier = Modifier
                             .width(170.dp)
                             .height(44.dp)
-                            .bouncyScale(restartPress)
                             .bouncyClickTarget(restartPress) { onRestart() }
+                            .bouncyScale(restartPress)
                     )
                 }
 
@@ -3495,8 +3504,8 @@ private fun PauseMenuDialog(
                         modifier = Modifier
                             .width(170.dp)
                             .height(44.dp)
-                            .bouncyScale(soundPress)
                             .bouncyClickTarget(soundPress) { onToggleSound() }
+                            .bouncyScale(soundPress)
                     )
                 }
 
@@ -3508,8 +3517,8 @@ private fun PauseMenuDialog(
                         modifier = Modifier
                             .width(170.dp)
                             .height(44.dp)
-                            .bouncyScale(homePress)
                             .bouncyClickTarget(homePress) { onHome() }
+                            .bouncyScale(homePress)
                     )
                 }
             }

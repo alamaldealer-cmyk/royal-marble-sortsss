@@ -84,11 +84,11 @@ fun LivesHudPill(
         .let { m ->
             if (onClick != null) {
                 m.minimumInteractiveComponentSize()
-                    .bouncyScale(pressState)
                     .bouncyClickTarget(pressState, role = Role.Button) {
                         SoundManager.playTap()
                         onClick()
                     }
+                    .bouncyScale(pressState)
             } else {
                 m
             }
@@ -247,11 +247,11 @@ fun UniversalCoinRack(
         .let { m ->
             if (onPlusClick != null) {
                 m.minimumInteractiveComponentSize()
-                    .bouncyScale(pressState)
                     .bouncyClickTarget(pressState, role = Role.Button) {
                         SoundManager.playTap()
                         onPlusClick()
                     }
+                    .bouncyScale(pressState)
             } else {
                 m
             }

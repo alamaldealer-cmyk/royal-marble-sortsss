@@ -425,9 +425,9 @@ fun LevelCompleteModal(
                     contentDescription = "Pause",
                     modifier = Modifier
                         .size(52.dp, 56.dp)
-                        .bouncyScale(pausePress)
                         .testTag("victory_pause_button")
                         .bouncyClickTarget(pausePress) { onPause() }
+                        .bouncyScale(pausePress)
                 )
             } else {
                 Spacer(modifier = Modifier.size(52.dp, 56.dp))
@@ -660,7 +660,6 @@ fun LevelCompleteModal(
                     modifier = Modifier
                         .width(170.dp)
                         .height(48.dp)
-                        .bouncyScale(bluePress)
                         .testTag("claim_multiplied_button")
                         .onGloballyPositioned { coords ->
                             val pos = coords.positionInRoot()
@@ -669,7 +668,8 @@ fun LevelCompleteModal(
                         .bouncyClickTarget(bluePress, enabled = !isStopped) {
                             val origin = if (blueBtnPos != Offset.Zero) blueBtnPos else buttonCenterInRoot
                             triggerCoinCollection(50 * activeMultiplier, origin)
-                        },
+                        }
+                        .bouncyScale(bluePress),
                     contentAlignment = Alignment.Center
                 ) {
                     if (btnSmoothBlue != null) {
@@ -697,7 +697,6 @@ fun LevelCompleteModal(
                     modifier = Modifier
                         .width(170.dp)
                         .height(48.dp)
-                        .bouncyScale(greenPress)
                         .testTag("claim_base_button")
                         .onGloballyPositioned { coords ->
                             val pos = coords.positionInRoot()
@@ -706,7 +705,8 @@ fun LevelCompleteModal(
                         .bouncyClickTarget(greenPress, enabled = !isStopped) {
                             val origin = if (greenBtnPos != Offset.Zero) greenBtnPos else buttonCenterInRoot
                             triggerCoinCollection(50, origin)
-                        },
+                        }
+                        .bouncyScale(greenPress),
                     contentAlignment = Alignment.Center
                 ) {
                     if (btnSmoothGreen != null) {

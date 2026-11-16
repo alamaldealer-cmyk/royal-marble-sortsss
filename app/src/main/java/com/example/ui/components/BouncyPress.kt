@@ -147,16 +147,20 @@ fun GreenPlayPillButton(
         AssetLoader.loadBitmap(context, "profile/btn_play_green_pill.png")
     }
     val press = rememberBouncyPressState(pressedScale = 0.88f)
-    val labelSize = if (text.length > 9) 28.sp else 32.sp
+    val labelSize = when {
+        text.contains(":") -> 25.sp
+        text.length > 9 -> 28.sp
+        else -> 32.sp
+    }
 
     Box(
         modifier = modifier
             .fillMaxWidth(0.64f)
             .widthIn(max = 250.dp)
             .aspectRatio(640f / 200f)
-            .bouncyScale(press)
             .testTag(testTag)
-            .bouncyClickTarget(press, role = Role.Button, onClick = onClick),
+            .bouncyClickTarget(press, role = Role.Button, onClick = onClick)
+            .bouncyScale(press),
         contentAlignment = Alignment.Center
     ) {
         if (btnPlayGreenPill != null) {

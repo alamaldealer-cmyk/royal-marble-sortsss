@@ -334,18 +334,18 @@ fun StoryCutsceneScreen(
                 val skipPress = rememberBouncyPressState(pressedScale = 0.88f)
                 Box(
                     modifier = Modifier
-                        .bouncyScale(skipPress)
                         .height(48.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Color(0xCC0B2B66))
-                        .border(2.dp, Color(0xFF7CE7FF), RoundedCornerShape(24.dp))
+                        .testTag("story_skip_button")
                         .bouncyClickTarget(skipPress) {
                             SoundManager.stopStorySfx()
                             SoundManager.playTap()
                             onComplete()
                         }
-                        .padding(horizontal = 18.dp)
-                        .testTag("story_skip_button"),
+                        .bouncyScale(skipPress)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color(0xCC0B2B66))
+                        .border(2.dp, Color(0xFF7CE7FF), RoundedCornerShape(24.dp))
+                        .padding(horizontal = 18.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -463,21 +463,21 @@ fun StoryCutsceneScreen(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .bouncyScale(nextPress)
                                 .height(52.dp)
+                                .testTag("story_next_button")
+                                .bouncyClickTarget(nextPress) {
+                                    SoundManager.stopStorySfx()
+                                    SoundManager.playTap()
+                                    beatIndex++
+                                }
+                                .bouncyScale(nextPress)
                                 .clip(RoundedCornerShape(26.dp))
                                 .background(
                                     Brush.verticalGradient(
                                         listOf(Color(0xFF38BDF8), Color(0xFF0284C7))
                                     )
                                 )
-                                .border(2.dp, Color(0xFFBAE6FD), RoundedCornerShape(26.dp))
-                                .bouncyClickTarget(nextPress) {
-                                    SoundManager.stopStorySfx()
-                                    SoundManager.playTap()
-                                    beatIndex++
-                                }
-                                .testTag("story_next_button"),
+                                .border(2.dp, Color(0xFFBAE6FD), RoundedCornerShape(26.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(

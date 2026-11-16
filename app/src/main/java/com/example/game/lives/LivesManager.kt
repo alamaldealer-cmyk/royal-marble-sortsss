@@ -13,6 +13,7 @@ data class LifeSnapshot(
 
 object LivesManager {
     const val MAX_LIVES = 5
+    const val AD_REWARD_LIVES = 3
     const val REFILL_DURATION_MS = 20L * 60L * 1000L // 20 minutes per 1 life
     const val REFILL_COIN_COST = 900
 
@@ -87,8 +88,17 @@ object LivesManager {
         nextRefillAtMs: Long,
         nowMs: Long
     ): LifeSnapshot {
+        return addLives(lives = lives, nextRefillAtMs = nextRefillAtMs, nowMs = nowMs, count = 1)
+    }
+
+    fun addLives(
+        lives: Int,
+        nextRefillAtMs: Long,
+        nowMs: Long,
+        count: Int = AD_REWARD_LIVES
+    ): LifeSnapshot {
         val reconciled = reconcileLives(lives, nextRefillAtMs, nowMs)
-        val newLives = (reconciled.lives + 1).coerceAtMost(MAX_LIVES)
+        val newLives = (reconciled.lives + count.coerceAtLeast(0)).coerceAtMost(MAX_LIVES)
         return if (newLives >= MAX_LIVES) {
             LifeSnapshot(lives = MAX_LIVES, nextRefillAtMs = 0L, remainingMs = 0L)
         } else {

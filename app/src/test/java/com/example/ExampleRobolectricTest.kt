@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
@@ -314,6 +315,24 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("profile_button").assertIsDisplayed()
     composeTestRule.onNodeWithText("Player 1").assertDoesNotExist()
 
+    // Home animated coin-event button is displayed below logo and above play button
+    composeTestRule.onNodeWithTag("home_coin_event_button").assertIsDisplayed()
+    val logoBounds = composeTestRule.onNodeWithTag("home_animated_logo").fetchSemanticsNode().boundsInRoot
+    val eventBounds = composeTestRule.onNodeWithTag("home_coin_event_button").fetchSemanticsNode().boundsInRoot
+    val playBounds = composeTestRule.onNodeWithTag("play_button").fetchSemanticsNode().boundsInRoot
+    org.junit.Assert.assertTrue(eventBounds.left > logoBounds.center.x)
+    org.junit.Assert.assertTrue(eventBounds.top >= logoBounds.bottom - 1f)
+    org.junit.Assert.assertTrue(eventBounds.bottom <= playBounds.top + 1f)
+    composeTestRule.onNodeWithTag("home_coin_event_button").performClick()
+    composeTestRule.mainClock.advanceTimeBy(300L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.onNodeWithTag("jackpot_tower_modal").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("jackpot_coin_rack").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("jackpot_claim_free_button").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("jackpot_close_button").performClick()
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.onNodeWithTag("jackpot_tower_modal").assertDoesNotExist()
+
     // New Lives (5 + Full) and Coins (1820 + green plus) HUD must appear
     composeTestRule.onNodeWithTag("lives_hud_pill").assertIsDisplayed()
     composeTestRule.onNodeWithText("5").assertIsDisplayed()
@@ -375,5 +394,252 @@ class ExampleRobolectricTest {
 
     assertEquals(true, lifeLost)
     assertEquals(true, returnedHome)
+  }
+
+  @Test
+  fun `jackpotTowerModal claims 50 free coins with flight animation then switches to watch ad button`() {
+    var totalCoins by mutableIntStateOf(1000)
+    var claimedSteps by mutableIntStateOf(0)
+    var dismissed = false
+
+    composeTestRule.mainClock.autoAdvance = false
+    composeTestRule.setContent {
+      MyApplicationTheme {
+        com.example.ui.components.JackpotTowerModal(
+          coins = totalCoins,
+          claimedSteps = claimedSteps,
+          onClaimTier = { reward ->
+            totalCoins += reward
+            claimedSteps++
+          },
+          onDismiss = { dismissed = true }
+        )
+      }
+    }
+
+    composeTestRule.mainClock.advanceTimeBy(300L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+
+    composeTestRule.onNodeWithTag("jackpot_tower_modal").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("jackpot_coin_rack").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("jackpot_tower_sprite").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("jackpot_arrow_left").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("jackpot_arrow_right").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("jackpot_claim_free_button").assertIsDisplayed()
+
+    val towerBounds = composeTestRule.onNodeWithTag("jackpot_tower_sprite").fetchSemanticsNode().boundsInRoot
+    val leftArrowBounds = composeTestRule.onNodeWithTag("jackpot_arrow_left").fetchSemanticsNode().boundsInRoot
+    val rightArrowBounds = composeTestRule.onNodeWithTag("jackpot_arrow_right").fetchSemanticsNode().boundsInRoot
+    org.junit.Assert.assertTrue(leftArrowBounds.left >= towerBounds.left)
+    org.junit.Assert.assertTrue(rightArrowBounds.right <= towerBounds.right)
+    org.junit.Assert.assertTrue(leftArrowBounds.right < rightArrowBounds.left)
+
+    // Claim initial free 50 coins
+    composeTestRule.onNodeWithTag("jackpot_claim_free_button").performClick()
+    // Advance through coin burst & flight animation (~1.6s total)
+    repeat(40) {
+      composeTestRule.mainClock.advanceTimeBy(50L)
+      composeTestRule.mainClock.advanceTimeByFrame()
+    }
+
+    assertEquals(1050, totalCoins)
+    assertEquals(1, claimedSteps)
+
+    // Next tier (100) must display the Watch Ad Free Coins button
+    composeTestRule.onNodeWithTag("jackpot_watch_ad_button").assertIsDisplayed()
+
+    // Tapping Watch Ad shows rewarded ad overlay then awards 100 coins
+    composeTestRule.onNodeWithTag("jackpot_watch_ad_button").performClick()
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.onNodeWithTag("jackpot_watching_ad_overlay").assertIsDisplayed()
+
+    repeat(75) {
+      composeTestRule.mainClock.advanceTimeBy(50L)
+      composeTestRule.mainClock.advanceTimeByFrame()
+    }
+
+    assertEquals(1150, totalCoins)
+    assertEquals(2, claimedSteps)
+
+    // Close button dismisses modal cleanly
+    composeTestRule.onNodeWithTag("jackpot_close_button").performClick()
+    composeTestRule.mainClock.advanceTimeByFrame()
+    assertEquals(true, dismissed)
+  }
+
+  @Test
+  fun `jackpotTowerModal shows green cooldown button with matching outer timer when all 5 rewards claimed`() {
+    val sharedRemainingMs = (11L * 3600L + 22L * 60L + 33L) * 1000L // 11:22:33
+    val snapshot = com.example.game.jackpot.JackpotEventSnapshot(
+      claimedSteps = 5,
+      cycleEndAtMs = 999_999_999L,
+      remainingMs = sharedRemainingMs
+    )
+
+    composeTestRule.mainClock.autoAdvance = false
+    composeTestRule.setContent {
+      MyApplicationTheme {
+        HomeScreen(
+          levelNumber = 1,
+          coins = 1820,
+          jackpotSnapshot = snapshot,
+          jackpotClaimedSteps = snapshot.claimedSteps,
+          onClaimJackpotReward = {},
+          soundEnabled = true,
+          musicEnabled = false,
+          vibrationEnabled = true,
+          onStartGame = {},
+          onAddCoins = {},
+          onSetLevel = {},
+          onToggleSound = {},
+          onToggleMusic = {},
+          onToggleVibration = {}
+        )
+      }
+    }
+
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.mainClock.advanceTimeByFrame()
+
+    // Outer HomeCoinEventButton advertises exact same 11:22:33 timer
+    composeTestRule.onNodeWithContentDescription(
+      "Coin Event, 0 notifications, 0 of 5, 11:22:33"
+    ).assertIsDisplayed()
+
+    // Opening Jackpot Tower shows green cooldown button displaying 11:22:33
+    composeTestRule.onNodeWithTag("home_coin_event_button").performClick()
+    composeTestRule.mainClock.advanceTimeBy(300L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+
+    composeTestRule.onNodeWithTag("jackpot_tower_modal").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("jackpot_cooldown_button").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("Next Jackpot in 11:22:33").assertIsDisplayed()
+  }
+
+  @Test
+  fun `outOfLivesModal renders cropped coin and ad buttons and awards +3 lives on ad`() {
+    var coins by mutableIntStateOf(500)
+    var watchAdCount = 0
+    var refillAllCount = 0
+
+    composeTestRule.mainClock.autoAdvance = false
+    composeTestRule.setContent {
+      MyApplicationTheme {
+        com.example.ui.components.OutOfLivesModal(
+          lifeSnapshot = LifeSnapshot(
+            lives = 1,
+            nextRefillAtMs = 600_000L,
+            remainingMs = 600_000L
+          ),
+          coins = coins,
+          onWatchAdForLife = { watchAdCount++ },
+          onCoinsRefillAll = { refillAllCount++ },
+          onDismiss = {}
+        )
+      }
+    }
+
+    composeTestRule.mainClock.advanceTimeBy(300L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+
+    composeTestRule.onNodeWithTag("out_of_lives_coins_button").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("out_of_lives_watch_ad_button").assertIsDisplayed()
+
+    // Insufficient coins (< 900) shows +3 Lives hint and does not refill
+    composeTestRule.onNodeWithTag("out_of_lives_coins_button").performClick()
+    composeTestRule.mainClock.advanceTimeBy(120L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+    assertEquals(0, refillAllCount)
+    composeTestRule.onNodeWithText("Need 900 coins! Watch Ad for +3 Lives").assertIsDisplayed()
+
+    // Sufficient coins (>= 900) triggers full refill
+    composeTestRule.runOnUiThread { coins = 1200 }
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.onNodeWithTag("out_of_lives_coins_button").performClick()
+    composeTestRule.mainClock.advanceTimeByFrame()
+    assertEquals(1, refillAllCount)
+
+    // Watch Ad triggers +3 Lives rewarded ad overlay and callback
+    composeTestRule.onNodeWithTag("out_of_lives_watch_ad_button").performClick()
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.onNodeWithText("Getting +3 Lives...").assertIsDisplayed()
+
+    repeat(55) {
+      composeTestRule.mainClock.advanceTimeBy(50L)
+      composeTestRule.mainClock.advanceTimeByFrame()
+    }
+    assertEquals(1, watchAdCount)
+  }
+
+  @Test
+  fun `close and watch ad buttons fire on first single tap even near outer edge during press shrink`() {
+    var showOutOfSpace by mutableStateOf(false)
+    var livesDismissCount = 0
+    var outOfSpaceWatchAdCount = 0
+    var outOfSpaceCloseCount = 0
+
+    composeTestRule.mainClock.autoAdvance = false
+    composeTestRule.setContent {
+      MyApplicationTheme {
+        if (!showOutOfSpace) {
+          com.example.ui.components.OutOfLivesModal(
+            lifeSnapshot = LifeSnapshot(lives = 0, nextRefillAtMs = 600_000L, remainingMs = 600_000L),
+            coins = 100,
+            onWatchAdForLife = {},
+            onCoinsRefillAll = {},
+            onDismiss = { livesDismissCount++ }
+          )
+        } else {
+          com.example.ui.components.OutOfSpaceModal(
+            coins = 100,
+            onWatchAdPlayOn = { outOfSpaceWatchAdCount++ },
+            onCoinsPlayOn = {},
+            onCloseToHome = { outOfSpaceCloseCount++ }
+          )
+        }
+      }
+    }
+
+    composeTestRule.mainClock.advanceTimeBy(300L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+
+    // Press near outer 4% left edge of the close X button, advance clock through shrink animation, then release
+    composeTestRule.onNodeWithTag("out_of_lives_close_button").performTouchInput {
+      down(Offset(width * 0.04f, centerY))
+    }
+    composeTestRule.mainClock.advanceTimeBy(90L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.onNodeWithTag("out_of_lives_close_button").performTouchInput {
+      up()
+    }
+    composeTestRule.mainClock.advanceTimeByFrame()
+    assertEquals(1, livesDismissCount)
+
+    // Verify OutOfSpaceModal Watch Ad and Close X buttons fire on first single edge-tap as well
+    composeTestRule.runOnUiThread { showOutOfSpace = true }
+    composeTestRule.mainClock.advanceTimeBy(300L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+
+    composeTestRule.onNodeWithTag("out_of_space_watch_ad_button").performTouchInput {
+      down(Offset(width * 0.03f, centerY))
+    }
+    composeTestRule.mainClock.advanceTimeBy(90L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.onNodeWithTag("out_of_space_watch_ad_button").performTouchInput {
+      up()
+    }
+    composeTestRule.mainClock.advanceTimeByFrame()
+    assertEquals(1, outOfSpaceWatchAdCount)
+
+    composeTestRule.onNodeWithTag("out_of_space_close_button").performTouchInput {
+      down(Offset(width * 0.96f, centerY))
+    }
+    composeTestRule.mainClock.advanceTimeBy(90L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.onNodeWithTag("out_of_space_close_button").performTouchInput {
+      up()
+    }
+    composeTestRule.mainClock.advanceTimeByFrame()
+    assertEquals(1, outOfSpaceCloseCount)
   }
 }

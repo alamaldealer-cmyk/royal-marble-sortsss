@@ -590,17 +590,17 @@ fun BucketColorTestScreen(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .bouncyScale(dropPress)
                             .height(48.dp)
+                            .testTag("test_step_drop")
+                            .bouncyClickTarget(dropPress) { triggerManualDrop() }
+                            .bouncyScale(dropPress)
                             .clip(RoundedCornerShape(14.dp))
                             .background(
                                 Brush.verticalGradient(
                                     listOf(Color(0xFF4ADE80), Color(0xFF22C55E), Color(0xFF15803D))
                                 )
                             )
-                            .border(2.dp, Color(0xFFA8F028), RoundedCornerShape(14.dp))
-                            .bouncyClickTarget(dropPress) { triggerManualDrop() }
-                            .testTag("test_step_drop"),
+                            .border(2.dp, Color(0xFFA8F028), RoundedCornerShape(14.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -622,7 +622,6 @@ fun BucketColorTestScreen(
                         interactionSource = replayPress.interactionSource,
                         modifier = Modifier
                             .size(48.dp)
-                            .bouncyScale(replayPress)
                             .clip(RoundedCornerShape(14.dp))
                             .background(Color(0xFF7C3AED))
                             .border(2.dp, Color(0xFFE9D5FF), RoundedCornerShape(14.dp))
@@ -631,7 +630,8 @@ fun BucketColorTestScreen(
                         Icon(
                             imageVector = Icons.Filled.Refresh,
                             contentDescription = "Replay Bucket Cycle",
-                            tint = Color.White
+                            tint = Color.White,
+                            modifier = Modifier.bouncyScale(replayPress)
                         )
                     }
                 }
@@ -740,6 +740,11 @@ fun BucketColorTestScreen(
                                     Box(
                                         modifier = Modifier
                                             .size(38.dp)
+                                            .testTag("swatch_${c.key}")
+                                            .bouncyClickTarget(swatchPress) {
+                                                SoundManager.playTap()
+                                                selectColor(idx)
+                                            }
                                             .bouncyScale(swatchPress)
                                             .clip(RoundedCornerShape(10.dp))
                                             .background(if (selected) Color(0xFF1D4ED8) else Color(0xFF001945))
@@ -748,12 +753,7 @@ fun BucketColorTestScreen(
                                                 color = if (selected) Color(0xFFFFE600) else Color(0xFF38BDF8),
                                                 shape = RoundedCornerShape(10.dp)
                                             )
-                                            .bouncyClickTarget(swatchPress) {
-                                                SoundManager.playTap()
-                                                selectColor(idx)
-                                            }
-                                            .padding(4.dp)
-                                            .testTag("swatch_${c.key}"),
+                                            .padding(4.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         if (bucketThumb != null) {

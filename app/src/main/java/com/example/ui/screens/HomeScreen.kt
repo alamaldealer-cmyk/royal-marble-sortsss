@@ -28,8 +28,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -51,12 +53,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.game.assets.AssetLoader
+import com.example.game.jackpot.JackpotEventManager
+import com.example.game.jackpot.JackpotEventSnapshot
 import com.example.game.lives.LifeSnapshot
 import com.example.game.lives.LivesManager
 import com.example.game.sound.SoundManager
+import kotlinx.coroutines.delay
 import com.example.ui.components.AnimatedGameLogo
 import com.example.ui.components.BottomNav
 import com.example.ui.components.GreenPlayPillButton
+import com.example.ui.components.HomeCoinEventButton
+import com.example.ui.components.JackpotTowerModal
 import com.example.ui.components.LivesHudPill
 import com.example.ui.components.NavTab
 import com.example.ui.components.OutOfLivesModal
@@ -102,6 +109,9 @@ fun HomeScreen(
     vibrationEnabled: Boolean,
     onStartGame: () -> Unit,
     onOpenColorTest: () -> Unit = {},
+    jackpotSnapshot: JackpotEventSnapshot? = null,
+    jackpotClaimedSteps: Int = 0,
+    onClaimJackpotReward: ((Int) -> Unit)? = null,
     onAddCoins: (Int) -> Unit,
     onWatchAdForLife: () -> Unit = {},
     onRefillLivesWithCoins: () -> Unit = {},
@@ -115,7 +125,34 @@ fun HomeScreen(
     var activeTab by remember { mutableStateOf(NavTab.HOME) }
     var isProfileModalOpen by remember { mutableStateOf(false) }
     var showOutOfLivesModal by remember { mutableStateOf(false) }
+    var showJackpotTowerModal by remember { mutableStateOf(false) }
+    var localJackpotClaimedSteps by remember(jackpotClaimedSteps) {
+        mutableIntStateOf(jackpotClaimedSteps.coerceIn(0, 5))
+    }
+    var fallbackJackpotRemainingMs by remember { mutableLongStateOf(JackpotEventManager.CYCLE_DURATION_MS) }
     var activeInfoModal by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(jackpotSnapshot == null) {
+        if (jackpotSnapshot == null) {
+            while (true) {
+                delay(1000L)
+                if (fallbackJackpotRemainingMs > 1000L) {
+                    fallbackJackpotRemainingMs -= 1000L
+                } else {
+                    fallbackJackpotRemainingMs = JackpotEventManager.CYCLE_DURATION_MS
+                    localJackpotClaimedSteps = 0
+                }
+            }
+        }
+    }
+
+    val effectiveJackpotSteps = when {
+        jackpotSnapshot != null -> jackpotSnapshot.claimedSteps.coerceIn(0, 5)
+        onClaimJackpotReward != null -> jackpotClaimedSteps.coerceIn(0, 5)
+        else -> localJackpotClaimedSteps
+    }
+    val effectiveJackpotRemainingMs = jackpotSnapshot?.remainingMs ?: fallbackJackpotRemainingMs
+    val remainingJackpotSteps = (5 - effectiveJackpotSteps).coerceIn(0, 5)
 
     // Bitmaps
     val tropicalBg = remember { AssetLoader.loadBitmap(context, "tropical_beach_resort_entrance.png") }
@@ -173,15 +210,15 @@ fun HomeScreen(
                     Box(
                         modifier = Modifier
                             .size(52.dp)
-                            .shadow(8.dp, RoundedCornerShape(14.dp))
-                            .border(3.dp, Color(0xFFFFD700), RoundedCornerShape(14.dp))
-                            .clip(RoundedCornerShape(14.dp))
-                            .bouncyScale(profilePress)
                             .testTag("profile_button")
                             .bouncyClickTarget(profilePress) {
                                 SoundManager.playTap()
                                 isProfileModalOpen = true
                             }
+                            .bouncyScale(profilePress)
+                            .shadow(8.dp, RoundedCornerShape(14.dp))
+                            .border(3.dp, Color(0xFFFFD700), RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(14.dp))
                     ) {
                         if (currentAvatarBitmap != null) {
                             Image(
@@ -272,18 +309,40 @@ fun HomeScreen(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .fillMaxWidth()
-                                .padding(top = 4.dp),
+                                .fillMaxWidth(),
                             contentAlignment = Alignment.TopCenter
                         ) {
-                            AnimatedGameLogo(
+                            Column(
                                 modifier = Modifier
-                                    .fillMaxWidth(0.95f)
-                                    .widthIn(max = 360.dp)
-                            )
+                                    .fillMaxWidth()
+                                    .padding(top = 2.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                AnimatedGameLogo(
+                                    modifier = Modifier
+                                        .weight(1f, fill = false)
+                                        .fillMaxWidth(0.95f)
+                                        .widthIn(max = 360.dp)
+                                )
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(end = 6.dp, top = 4.dp),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    HomeCoinEventButton(
+                                        badgeCount = remainingJackpotSteps,
+                                        progressCurrent = remainingJackpotSteps,
+                                        progressMax = 5,
+                                        remainingMs = effectiveJackpotRemainingMs,
+                                        onClick = { showJackpotTowerModal = true }
+                                    )
+                                }
+                            }
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         GreenPlayPillButton(
                             text = "LEVEL $levelNumber",
@@ -306,8 +365,13 @@ fun HomeScreen(
                             modifier = Modifier
                                 .fillMaxWidth(0.72f)
                                 .widthIn(max = 300.dp)
-                                .bouncyScale(colorTestPress)
                                 .height(48.dp)
+                                .testTag("color_test_button")
+                                .bouncyClickTarget(colorTestPress) {
+                                    SoundManager.playTap()
+                                    onOpenColorTest()
+                                }
+                                .bouncyScale(colorTestPress)
                                 .shadow(6.dp, RoundedCornerShape(24.dp))
                                 .clip(RoundedCornerShape(24.dp))
                                 .background(
@@ -319,12 +383,7 @@ fun HomeScreen(
                                         )
                                     )
                                 )
-                                .border(2.5.dp, Color(0xFFFFD700), RoundedCornerShape(24.dp))
-                                .bouncyClickTarget(colorTestPress) {
-                                    SoundManager.playTap()
-                                    onOpenColorTest()
-                                }
-                                .testTag("color_test_button"),
+                                .border(2.5.dp, Color(0xFFFFD700), RoundedCornerShape(24.dp)),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
@@ -430,6 +489,24 @@ fun HomeScreen(
                 onDismiss = { activeInfoModal = null }
             )
         }
+
+        // Jackpot Tower Modal (opened from HomeCoinEventButton)
+        if (showJackpotTowerModal) {
+            JackpotTowerModal(
+                coins = coins,
+                claimedSteps = effectiveJackpotSteps,
+                remainingMs = effectiveJackpotRemainingMs,
+                onClaimTier = { rewardCoins ->
+                    if (onClaimJackpotReward != null) {
+                        onClaimJackpotReward(rewardCoins)
+                    } else {
+                        onAddCoins(rewardCoins)
+                        localJackpotClaimedSteps = (localJackpotClaimedSteps + 1).coerceAtMost(5)
+                    }
+                },
+                onDismiss = { showJackpotTowerModal = false }
+            )
+        }
     }
 }
 
@@ -497,6 +574,7 @@ fun ShopItemCard(item: ShopItem, coinBitmap: Bitmap?, onBuy: () -> Unit) {
         val buyPress = rememberBouncyPressState(pressedScale = 0.88f)
         Box(
             modifier = Modifier
+                .bouncyClickTarget(buyPress) { onBuy() }
                 .bouncyScale(buyPress)
                 .clip(RoundedCornerShape(12.dp))
                 .background(
@@ -505,7 +583,6 @@ fun ShopItemCard(item: ShopItem, coinBitmap: Bitmap?, onBuy: () -> Unit) {
                     )
                 )
                 .border(2.dp, Color(0xFFA8F028), RoundedCornerShape(12.dp))
-                .bouncyClickTarget(buyPress) { onBuy() }
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text(
@@ -586,16 +663,16 @@ fun SettingsTabContent(
                     Box(
                         modifier = Modifier
                             .size(38.dp)
-                            .bouncyScale(decPress)
-                            .clip(CircleShape)
-                            .background(Color(0xFFE93D5A))
-                            .border(1.5.dp, Color.White, CircleShape)
                             .bouncyClickTarget(decPress) {
                                 if (levelNumber > 1) {
                                     SoundManager.playTap()
                                     onSetLevel(levelNumber - 1)
                                 }
-                            },
+                            }
+                            .bouncyScale(decPress)
+                            .clip(CircleShape)
+                            .background(Color(0xFFE93D5A))
+                            .border(1.5.dp, Color.White, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -633,16 +710,16 @@ fun SettingsTabContent(
                     Box(
                         modifier = Modifier
                             .size(38.dp)
-                            .bouncyScale(incPress)
-                            .clip(CircleShape)
-                            .background(Color(0xFF2EB55A))
-                            .border(1.5.dp, Color.White, CircleShape)
                             .bouncyClickTarget(incPress) {
                                 if (levelNumber < 100) {
                                     SoundManager.playTap()
                                     onSetLevel(levelNumber + 1)
                                 }
-                            },
+                            }
+                            .bouncyScale(incPress)
+                            .clip(CircleShape)
+                            .background(Color(0xFF2EB55A))
+                            .border(1.5.dp, Color.White, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -661,14 +738,14 @@ fun SettingsTabContent(
                 val resetPress = rememberBouncyPressState(pressedScale = 0.88f)
                 Box(
                     modifier = Modifier
-                        .bouncyScale(resetPress)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF004A80))
-                        .border(1.dp, Color(0xFF00C4FF), RoundedCornerShape(10.dp))
                         .bouncyClickTarget(resetPress) {
                             SoundManager.playTap()
                             onSetLevel(1)
                         }
+                        .bouncyScale(resetPress)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color(0xFF004A80))
+                        .border(1.dp, Color(0xFF00C4FF), RoundedCornerShape(10.dp))
                         .padding(horizontal = 12.dp, vertical = 4.dp)
                 ) {
                     Text(
@@ -728,11 +805,11 @@ fun SettingsTabContent(
                 contentDescription = "Support",
                 modifier = Modifier
                     .fillMaxWidth(0.6f)
-                    .bouncyScale(supportPress)
                     .bouncyClickTarget(supportPress) {
                         SoundManager.playTap()
                         onOpenModal("support")
                     }
+                    .bouncyScale(supportPress)
             )
         }
 
@@ -750,11 +827,11 @@ fun SettingsTabContent(
                     contentDescription = "Terms",
                     modifier = Modifier
                         .weight(1f)
-                        .bouncyScale(termsPress)
                         .bouncyClickTarget(termsPress) {
                             SoundManager.playTap()
                             onOpenModal("terms")
                         }
+                        .bouncyScale(termsPress)
                 )
             }
             if (btnPrivacy != null) {
@@ -764,11 +841,11 @@ fun SettingsTabContent(
                     contentDescription = "Privacy",
                     modifier = Modifier
                         .weight(1f)
-                        .bouncyScale(privacyPress)
                         .bouncyClickTarget(privacyPress) {
                             SoundManager.playTap()
                             onOpenModal("privacy")
                         }
+                        .bouncyScale(privacyPress)
                 )
             }
         }
@@ -785,11 +862,11 @@ fun SettingToggleColumn(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .bouncyScale(togglePress)
             .bouncyClickTarget(togglePress) {
                 SoundManager.playTap()
                 onClick()
             }
+            .bouncyScale(togglePress)
     ) {
         if (iconBitmap != null) {
             Image(
@@ -925,16 +1002,16 @@ fun ProfileModal(
                         Box(
                             modifier = Modifier
                                 .size(28.dp)
-                                .bouncyScale(decPress)
-                                .clip(CircleShape)
-                                .background(Color(0xFFE93D5A))
-                                .border(1.dp, Color.White, CircleShape)
                                 .bouncyClickTarget(decPress) {
                                     if (draftLevel > 1) {
                                         SoundManager.playTap()
                                         draftLevel--
                                     }
-                                },
+                                }
+                                .bouncyScale(decPress)
+                                .clip(CircleShape)
+                                .background(Color(0xFFE93D5A))
+                                .border(1.dp, Color.White, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(text = "-", fontFamily = FredokaFontFamily, fontWeight = FontWeight.Black, color = Color.White, fontSize = 16.sp)
@@ -963,16 +1040,16 @@ fun ProfileModal(
                         Box(
                             modifier = Modifier
                                 .size(28.dp)
-                                .bouncyScale(incPress)
-                                .clip(CircleShape)
-                                .background(Color(0xFF2EB55A))
-                                .border(1.dp, Color.White, CircleShape)
                                 .bouncyClickTarget(incPress) {
                                     if (draftLevel < 100) {
                                         SoundManager.playTap()
                                         draftLevel++
                                     }
-                                },
+                                }
+                                .bouncyScale(incPress)
+                                .clip(CircleShape)
+                                .background(Color(0xFF2EB55A))
+                                .border(1.dp, Color.White, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(text = "+", fontFamily = FredokaFontFamily, fontWeight = FontWeight.Black, color = Color.White, fontSize = 16.sp)
@@ -1042,11 +1119,11 @@ fun ProfileModal(
                 modifier = Modifier
                     .width(176.dp)
                     .height(48.dp)
-                    .bouncyScale(savePress)
                     .bouncyClickTarget(savePress) {
                         SoundManager.playPowerup()
                         onSave(draftName.trim().ifEmpty { "Player 1" }, draftAvatarId, draftLevel)
-                    },
+                    }
+                    .bouncyScale(savePress),
                 contentAlignment = Alignment.Center
             ) {
                 if (btnLevelGreen != null) {
@@ -1083,6 +1160,10 @@ fun AvatarSlotItem(
     Box(
         modifier = Modifier
             .size(34.dp)
+            .bouncyClickTarget(slotPress) {
+                SoundManager.playTap()
+                onSelect()
+            }
             .bouncyScale(slotPress)
             .clip(RoundedCornerShape(6.dp))
             .border(
@@ -1090,10 +1171,6 @@ fun AvatarSlotItem(
                 color = if (isSelected) Color(0xFFFFE600) else Color.Transparent,
                 shape = RoundedCornerShape(6.dp)
             )
-            .bouncyClickTarget(slotPress) {
-                SoundManager.playTap()
-                onSelect()
-            }
     ) {
         if (bitmap != null) {
             Image(
@@ -1203,11 +1280,11 @@ fun InfoModal(type: String, onDismiss: () -> Unit) {
                 val closePress = rememberBouncyPressState(pressedScale = 0.88f)
                 Box(
                     modifier = Modifier
+                        .bouncyClickTarget(closePress) { onDismiss() }
                         .bouncyScale(closePress)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFF2EB55A))
                         .border(1.5.dp, Color.White, RoundedCornerShape(12.dp))
-                        .bouncyClickTarget(closePress) { onDismiss() }
                         .padding(horizontal = 24.dp, vertical = 8.dp)
                 ) {
                     Text(
