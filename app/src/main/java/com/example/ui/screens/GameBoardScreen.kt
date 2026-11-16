@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.unit.dp
 import com.example.ui.components.BucketFluffyRenderer
+import com.example.ui.components.LivesHudPill
 import com.example.ui.components.UniversalCoinRack
 import com.example.ui.components.bouncyClickTarget
 import com.example.ui.components.bouncyScale
@@ -60,6 +61,8 @@ import com.example.game.assets.AssetLoader
 import com.example.game.belt.BeltPath
 import com.example.game.constants.GameConstants
 import com.example.game.levels.LevelGenerator
+import com.example.game.lives.LifeSnapshot
+import com.example.game.lives.LivesManager
 import com.example.game.model.BeltBall
 import com.example.game.model.Brick
 import com.example.game.model.BrickColumn
@@ -78,6 +81,8 @@ import com.example.game.model.ParticleShape
 import com.example.game.physics.FunnelPhysics
 import com.example.game.rules.GameRules
 import com.example.game.sound.SoundManager
+import com.example.ui.components.CLEAN_UP_COIN_COST
+import com.example.ui.components.ChainFullCleanUpOverlay
 import com.example.ui.components.LevelCompleteModal
 import kotlin.math.PI
 import kotlin.math.cos
@@ -89,7 +94,10 @@ import kotlin.random.Random
 fun GameBoardScreen(
     levelNumber: Int,
     coins: Int,
+    lifeSnapshot: LifeSnapshot = LifeSnapshot(LivesManager.MAX_LIVES, 0L, 0L),
     onReturnHome: () -> Unit,
+    onLoseLife: () -> Unit = {},
+    onLevelWon: () -> Unit = {},
     onAddCoins: (Int) -> Unit,
     onLevelAdvanced: (Int) -> Unit
 ) {
@@ -229,6 +237,133 @@ fun GameBoardScreen(
         val powerupOverlayDuration = 1.05f
         var nextDropId by remember { mutableIntStateOf(5000) }
         var beltScrollDistance by remember { mutableFloatStateOf(0f) }
+        var currentBeltSpeed by remember { mutableFloatStateOf(GameConstants.BELT_SPEED) }
+        var chainStuckTimer by remember { mutableFloatStateOf(0f) }
+        var cleanUpHighlightedIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
+
+        fun executeCleanUp() {
+            val selectedBelt = beltBalls.filter { cleanUpHighlightedIds.contains(it.id) }.ifEmpty {
+                GameRules.selectCleanUpBeltBalls(beltBalls.toList(), 8)
+            }
+            val cleanUpItems = buildList {
+                for (fb in physics.balls) {
+                    add(
+                        GameRules.CleanUpReturnItem(
+                            id = fb.id,
+                            color = fb.color,
+                            startX = fb.x,
+                            startY = fb.y,
+                            isFromFunnel = true
+                        )
+                    )
+                }
+                for (bb in selectedBelt) {
+                    val coords = BeltPath.getBeltCoordinates(bb.s)
+                    add(
+                        GameRules.CleanUpReturnItem(
+                            id = bb.id,
+                            color = bb.color,
+                            startX = coords.x,
+                            startY = coords.y,
+                            isFromFunnel = false
+                        )
+                    )
+                }
+            }
+
+            val assignments = GameRules.planCleanUpReturn(grid, cleanUpItems)
+            if (assignments.isNotEmpty()) {
+                isMagnetActive = true
+                magnetPulseTimer = 1.15f
+                activePowerupOverlayType = "magnet"
+                powerupOverlayTimer = powerupOverlayDuration
+                isTutorialDismissed = true
+                SoundManager.playPowerup()
+
+                for (sp in 0 until 16) {
+                    val angle = Random.nextFloat() * 2f * PI.toFloat()
+                    val spd = 45f + Random.nextFloat() * 85f
+                    particles.add(
+                        Particle(
+                            x = 148f + cos(angle) * 14f,
+                            y = 342f + sin(angle) * 14f,
+                            vx = cos(angle) * spd,
+                            vy = sin(angle) * spd,
+                            color = if (sp % 2 == 0) 0xFF38E8FF else 0xFFFFE15A,
+                            size = 2.6f + Random.nextFloat() * 2.4f,
+                            maxLife = 0.55f
+                        )
+                    )
+                }
+
+                val staggerStep = if (assignments.size > 1) {
+                    minOf(0.026f, 0.50f / assignments.size)
+                } else {
+                    0f
+                }
+                val returnedFunnelIds = mutableSetOf<Int>()
+                val returnedBeltIds = mutableSetOf<Int>()
+
+                assignments.forEachIndexed { idx, assigned ->
+                    if (assigned.item.isFromFunnel) {
+                        returnedFunnelIds.add(assigned.item.id)
+                    } else {
+                        returnedBeltIds.add(assigned.item.id)
+                    }
+
+                    val cx = GameConstants.GRID_X_CENTERS[assigned.targetCol]
+                    val cy = GameConstants.GRID_Y_CENTERS[assigned.targetRow]
+                    val slotRow = assigned.targetSlotIndex / 3
+                    val slotCol = assigned.targetSlotIndex % 3
+                    val targetX = cx + (crateColNormX[slotCol] - 0.5f) * 34f
+                    val targetY = cy + (crateRowNormY[slotRow] - 0.5f) * 33f
+
+                    val startX = assigned.item.startX
+                    val startY = assigned.item.startY
+                    val midX = (startX + targetX) * 0.5f
+                    val arcSide = if (startX < targetX) -22f else 22f
+                    val controlX = (midX + arcSide).coerceIn(22f, 274f)
+                    val controlY = (startY * 0.32f + targetY * 0.68f) - 20f
+
+                    magnetReturningBalls.add(
+                        MagnetReturningBall(
+                            id = assigned.item.id,
+                            color = assigned.item.color,
+                            startX = startX,
+                            startY = startY,
+                            controlX = controlX,
+                            controlY = controlY,
+                            targetX = targetX,
+                            targetY = targetY,
+                            targetRow = assigned.targetRow,
+                            targetCol = assigned.targetCol,
+                            targetSlotIndex = assigned.targetSlotIndex,
+                            elapsed = 0f,
+                            delay = idx * staggerStep,
+                            duration = 0.46f
+                        )
+                    )
+                }
+
+                if (returnedFunnelIds.isNotEmpty()) {
+                    physics.balls.removeAll { returnedFunnelIds.contains(it.id) }
+                }
+                if (returnedBeltIds.isNotEmpty()) {
+                    beltBalls.removeAll { returnedBeltIds.contains(it.id) }
+                }
+            }
+
+            chainStuckTimer = 0f
+            cleanUpHighlightedIds = emptySet()
+            isFunnelLocked = GameRules.shouldBlockBlockTap(
+                waitingBallsCount = physics.balls.size,
+                currentlyLocked = false,
+                maxWaitingBalls = maxWaitingBalls,
+                resumeWaitingBalls = resumeWaitingBalls
+            )
+            funnelFullAlertTimer = 0f
+            gameState = "playing"
+        }
 
     // Reset on level change or restart
     LaunchedEffect(currentLevel, levelResetNonce) {
@@ -250,6 +385,8 @@ fun GameBoardScreen(
         cannonAimAngleDeg = 16f
         activePowerupOverlayType = null
         powerupOverlayTimer = 0f
+        chainStuckTimer = 0f
+        cleanUpHighlightedIds = emptySet()
         gameState = "playing"
         isPaused = false
         physics.balls.clear()
@@ -262,6 +399,7 @@ fun GameBoardScreen(
         cannonProjectiles.clear()
         cannonSmokePuffs.clear()
         beltScrollDistance = 0f
+        currentBeltSpeed = GameConstants.BELT_SPEED
     }
 
     // 60FPS Game Loop
@@ -274,8 +412,19 @@ fun GameBoardScreen(
                 lastTime = frameTimeNanos
 
                 if (!isPaused && gameState == "playing") {
-                    // 1. Advance conveyor belt
-                    beltScrollDistance = (beltScrollDistance + GameConstants.BELT_SPEED * dt) % BeltPath.TOTAL_PATH_LEN
+                    // 1. Advance conveyor belt (speeds up automatically once upper buckets are all cleared)
+                    val desiredBeltSpeed = GameRules.targetBeltSpeed(
+                        grid = grid,
+                        hasReturningBalls = magnetReturningBalls.isNotEmpty()
+                    )
+                    val speedBlend = (dt * 6f).coerceIn(0f, 1f)
+                    currentBeltSpeed += (desiredBeltSpeed - currentBeltSpeed) * speedBlend
+                    if (kotlin.math.abs(desiredBeltSpeed - currentBeltSpeed) < 0.5f) {
+                        currentBeltSpeed = desiredBeltSpeed
+                    }
+                    val isBeltBoosted = currentBeltSpeed > GameConstants.BELT_SPEED * 1.15f
+
+                    beltScrollDistance = (beltScrollDistance + currentBeltSpeed * dt) % BeltPath.TOTAL_PATH_LEN
                     val slotSpacing = BeltPath.TOTAL_PATH_LEN / beltCapacity
 
                     // Check feed point eligibility
@@ -291,10 +440,14 @@ fun GameBoardScreen(
                         }
                     }
 
+                    val feedWindow = maxOf(
+                        4.5f,
+                        minOf(slotSpacing * 0.50f, currentBeltSpeed * dt * 0.65f + 2.0f)
+                    )
                     val occupiedSlots = beltBalls.map { it.slotIndex }.toSet()
                     val canFeed = !isCannonActive &&
                             feedSlotIndex != -1 &&
-                            minFeedDist <= 4.5f &&
+                            minFeedDist <= feedWindow &&
                             !occupiedSlots.contains(feedSlotIndex) &&
                             beltBalls.size < beltCapacity
 
@@ -367,10 +520,23 @@ fun GameBoardScreen(
                     val matchedBallIds = mutableSetOf<Int>()
                     val nowMs = System.currentTimeMillis()
 
+                    val matchDropIntervalMs = if (isBeltBoosted) {
+                        GameConstants.MIN_DROP_INTERVAL_FAST_MS
+                    } else {
+                        GameConstants.MIN_DROP_INTERVAL_MS
+                    }
+                    val dropFlightDuration = if (isBeltBoosted) 0.13f else 0.18f
+
                     for (ball in beltBalls) {
                         if (BeltPath.isSOnBottomLane(ball.s)) {
                             val coords = BeltPath.getBeltCoordinates(ball.s)
-                            val match = GameRules.tryMatchBeltBall(coords.x, ball.color, columns, nowMs)
+                            val match = GameRules.tryMatchBeltBall(
+                                ballX = coords.x,
+                                ballColor = ball.color,
+                                columns = columns,
+                                nowMs = nowMs,
+                                minDropIntervalMs = matchDropIntervalMs
+                            )
                             if (match != null) {
                                 matchedBallIds.add(ball.id)
                                 val col = columns[match.matchedColIndex]
@@ -385,7 +551,7 @@ fun GameBoardScreen(
                                         targetX = col.x,
                                         targetY = GameConstants.BALTI_SOCKET_Y,
                                         progress = 0f,
-                                        duration = 0.18f,
+                                        duration = dropFlightDuration,
                                         colIndex = match.matchedColIndex,
                                         holeIndex = match.targetHoleIndex,
                                         mood = "happy_open",
@@ -866,6 +1032,30 @@ fun GameBoardScreen(
                                     cell.animTimer = 0f
                                 }
                             }
+                        }
+                    }
+
+                    // Detect full chain with no matching front bucket below
+                    if (gameState == "playing") {
+                        val isStuck = GameRules.isChainFullAndStuck(
+                            beltBalls = beltBalls,
+                            beltCapacity = beltCapacity,
+                            columns = columns,
+                            droppingBallsCount = droppingBalls.size,
+                            cannonProjectilesCount = cannonProjectiles.size,
+                            isMagnetActive = isMagnetActive,
+                            isCannonActive = isCannonActive
+                        )
+                        if (isStuck) {
+                            chainStuckTimer += dt
+                            if (chainStuckTimer >= 0.45f) {
+                                val selected = GameRules.selectCleanUpBeltBalls(beltBalls.toList(), 8)
+                                cleanUpHighlightedIds = selected.map { it.id }.toSet()
+                                SoundManager.playBlocked()
+                                gameState = "chain_stuck"
+                            }
+                        } else {
+                            chainStuckTimer = 0f
                         }
                     }
                 }
@@ -1812,9 +2002,22 @@ fun GameBoardScreen(
             }
             canvas.drawRoundRect(RectF(capsuleX, capsuleY, capsuleX + capsuleW, capsuleY + capsuleH), capsuleRx, capsuleRx, trackPaint)
 
-            // 2. Thick clean white outer capsule border rim
+            // 2. Thick clean white outer capsule border rim (subtle cyan speed glow when upper grid is cleared)
+            val isBeltBoostedVisual = currentBeltSpeed > GameConstants.BELT_SPEED * 1.15f
+            if (isBeltBoostedVisual) {
+                val boostGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = android.graphics.Color.parseColor("#4D5CF2FF")
+                    style = Paint.Style.STROKE
+                    strokeWidth = 7.5f
+                }
+                canvas.drawRoundRect(RectF(capsuleX, capsuleY, capsuleX + capsuleW, capsuleY + capsuleH), capsuleRx, capsuleRx, boostGlowPaint)
+            }
             val rimPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.parseColor("#E5EBFF")
+                color = if (isBeltBoostedVisual) {
+                    android.graphics.Color.parseColor("#B8FAFF")
+                } else {
+                    android.graphics.Color.parseColor("#E5EBFF")
+                }
                 style = Paint.Style.STROKE
                 strokeWidth = 3.5f
             }
@@ -3058,7 +3261,42 @@ fun GameBoardScreen(
 
         }
 
-        // Top Header Bar (matches HomeScreen and original game exactly: top 8.dp, horizontal padding)
+        // Chain Full / Stuck Clean Up Overlay (sits under Top HUD so Pause & Coin Rack stay bright & clickable)
+        if (gameState == "chain_stuck") {
+            val highlightedBalls = beltBalls.filter { cleanUpHighlightedIds.contains(it.id) }
+            ChainFullCleanUpOverlay(
+                coins = currentCoins,
+                beltCapacity = beltCapacity,
+                highlightedBeltBalls = highlightedBalls,
+                viewScale = viewScale,
+                viewOffsetX = viewOffsetX,
+                viewArenaOffsetY = viewArenaOffsetY,
+                grid = grid,
+                funnelBalls = physics.balls.toList(),
+                beltBalls = beltBalls.toList(),
+                beltScrollDistance = beltScrollDistance,
+                onWatchAdCleanUp = {
+                    executeCleanUp()
+                },
+                onCoinsCleanUp = {
+                    if (currentCoins >= CLEAN_UP_COIN_COST) {
+                        currentCoins -= CLEAN_UP_COIN_COST
+                        onAddCoins(-CLEAN_UP_COIN_COST)
+                        executeCleanUp()
+                    }
+                },
+                onQuit = {
+                    chainStuckTimer = 0f
+                    cleanUpHighlightedIds = emptySet()
+                    if (gameState != "won") {
+                        onLoseLife()
+                    }
+                    onReturnHome()
+                }
+            )
+        }
+
+        // Top Header Bar (matches HomeScreen and original game: Pause left, Lives + Coins right)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -3073,7 +3311,7 @@ fun GameBoardScreen(
                     bitmap = pauseNormalBitmap.asImageBitmap(),
                     contentDescription = "Pause",
                     modifier = Modifier
-                        .size(52.dp, 56.dp)
+                        .size(50.dp, 54.dp)
                         .bouncyScale(pausePress)
                         .testTag("pause_button")
                         .bouncyClickTarget(pausePress) {
@@ -3082,14 +3320,25 @@ fun GameBoardScreen(
                         }
                 )
             } else {
-                Spacer(modifier = Modifier.size(52.dp, 56.dp))
+                Spacer(modifier = Modifier.size(50.dp, 54.dp))
             }
 
-            // Coin Rack (top-right) - Exact same UniversalCoinRack component, size, and alignment
-            UniversalCoinRack(
-                bitmap = coinRackBitmap,
-                coins = currentCoins
-            )
+            // Lives + Coin Pills (top-right)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LivesHudPill(
+                    lifeSnapshot = lifeSnapshot,
+                    compact = true
+                )
+                UniversalCoinRack(
+                    bitmap = coinRackBitmap,
+                    coins = currentCoins,
+                    compact = true,
+                    showPlusButton = true
+                )
+            }
         }
 
         // Pause Menu Dialog
@@ -3114,9 +3363,18 @@ fun GameBoardScreen(
                 onHome = {
                     SoundManager.playTap()
                     isPaused = false
+                    if (gameState != "won") {
+                        onLoseLife()
+                    }
                     onReturnHome()
                 }
             )
+        }
+
+        LaunchedEffect(gameState) {
+            if (gameState == "won") {
+                onLevelWon()
+            }
         }
 
         // Level Complete Screen

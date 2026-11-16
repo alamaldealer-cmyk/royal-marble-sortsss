@@ -184,7 +184,8 @@ object GameRules {
         ballX: Float,
         ballColor: MarbleColor,
         columns: List<BrickColumn>,
-        nowMs: Long
+        nowMs: Long,
+        minDropIntervalMs: Long = GameConstants.MIN_DROP_INTERVAL_MS
     ): MatchResult? {
         for (i in columns.indices) {
             val col = columns[i]
@@ -197,7 +198,7 @@ object GameRules {
                 if (topBrick.color == ballColor) {
                     val capacityUsed = topBrick.filled + topBrick.inFlight
                     if (capacityUsed < GameConstants.BRICK_HOLES) {
-                        if (nowMs - col.lastDropTime >= GameConstants.MIN_DROP_INTERVAL_MS) {
+                        if (nowMs - col.lastDropTime >= minDropIntervalMs) {
                             col.lastDropTime = nowMs
                             topBrick.inFlight++
                             return MatchResult(matchedColIndex = i, targetHoleIndex = capacityUsed)
@@ -207,6 +208,35 @@ object GameRules {
             }
         }
         return null
+    }
+
+    fun areUpperBucketsCleared(grid: Array<Array<GridCell>>): Boolean {
+        for (r in 0 until GameConstants.GRID_ROWS) {
+            for (c in 0 until GameConstants.GRID_COLS) {
+                val cell = grid[r][c]
+                when (cell.kind) {
+                    CellKind.BLOCK, CellKind.LOCKED -> return false
+                    CellKind.DISPENSER -> {
+                        if ((cell.counter ?: 0) > 0 || cell.queue.isNotEmpty()) {
+                            return false
+                        }
+                    }
+                    CellKind.EMPTY, CellKind.WALL -> Unit
+                }
+            }
+        }
+        return true
+    }
+
+    fun targetBeltSpeed(
+        grid: Array<Array<GridCell>>,
+        hasReturningBalls: Boolean = false
+    ): Float {
+        return if (!hasReturningBalls && areUpperBucketsCleared(grid)) {
+            GameConstants.BELT_SPEED_FAST
+        } else {
+            GameConstants.BELT_SPEED
+        }
     }
 
     fun isLevelWon(columns: List<BrickColumn>): Boolean {
@@ -617,5 +647,474 @@ object GameRules {
         }
 
         return assignments
+    }
+
+    fun isChainFullAndStuck(
+        beltBalls: List<BeltBall>,
+        beltCapacity: Int,
+        columns: List<BrickColumn>,
+        droppingBallsCount: Int,
+        cannonProjectilesCount: Int,
+        isMagnetActive: Boolean,
+        isCannonActive: Boolean
+    ): Boolean {
+        if (beltBalls.size < beltCapacity) return false
+        if (columns.all { it.bricks.isEmpty() }) return false
+        if (droppingBallsCount > 0 || cannonProjectilesCount > 0 || isMagnetActive || isCannonActive) {
+            return false
+        }
+
+        for (col in columns) {
+            val front = col.bricks.firstOrNull() ?: continue
+            if (front.filled >= GameConstants.BRICK_HOLES ||
+                front.animState == "hit_3" ||
+                front.animState == "hold_full" ||
+                front.animState == "vanish"
+            ) {
+                return false
+            }
+            if ((front.filled + front.inFlight) < GameConstants.BRICK_HOLES &&
+                beltBalls.any { it.color == front.color }
+            ) {
+                return false
+            }
+        }
+        return true
+    }
+
+    fun selectCleanUpBeltBalls(
+        beltBalls: List<BeltBall>,
+        count: Int = 8
+    ): List<BeltBall> {
+        if (beltBalls.isEmpty() || count <= 0) return emptyList()
+        if (beltBalls.size <= count) return beltBalls
+
+        val centerX = (GameConstants.BELT_LEFT_CENTER_X + GameConstants.BELT_RIGHT_CENTER_X) * 0.5f
+        val topY = GameConstants.BELT_TOP_Y
+
+        return beltBalls
+            .sortedWith(
+                compareBy<BeltBall> { ball ->
+                    val coords = com.example.game.belt.BeltPath.getBeltCoordinates(ball.s)
+                    val lanePenalty = if (!coords.isBottomLane && coords.y <= topY + 4f) 0f else 1000f
+                    lanePenalty + abs(coords.x - centerX) + abs(coords.y - topY) * 3f
+                }.thenBy { it.id }
+            )
+            .take(count)
+    }
+
+    data class CleanUpReturnItem(
+        val id: Int,
+        val color: MarbleColor,
+        val startX: Float,
+        val startY: Float,
+        val isFromFunnel: Boolean
+    )
+
+    data class CleanUpBallAssignment(
+        val item: CleanUpReturnItem,
+        val targetRow: Int,
+        val targetCol: Int,
+        val targetSlotIndex: Int
+    )
+
+    fun planCleanUpReturn(
+        grid: Array<Array<GridCell>>,
+        items: List<CleanUpReturnItem>
+    ): List<CleanUpBallAssignment> {
+        if (items.isEmpty()) return emptyList()
+
+        val assignments = mutableListOf<CleanUpBallAssignment>()
+
+        val colPriority = listOf(2, 3, 1, 4, 0, 5)
+        val neighbors = arrayOf(Pair(1, 0), Pair(-1, 0), Pair(0, 1), Pair(0, -1))
+        val availableEmptySlots = ArrayDeque<Pair<Int, Int>>()
+        val fallbackWallSlots = ArrayDeque<Pair<Int, Int>>()
+
+        val visitedEmpty = Array(GameConstants.GRID_ROWS) { BooleanArray(GameConstants.GRID_COLS) }
+        val bfsEmpty = ArrayDeque<Pair<Int, Int>>()
+        for (c in colPriority) {
+            val cell = grid[GameConstants.EXIT_ROW][c]
+            if (cell.kind == CellKind.EMPTY || cell.kind == CellKind.BLOCK) {
+                visitedEmpty[GameConstants.EXIT_ROW][c] = true
+                bfsEmpty.addLast(Pair(GameConstants.EXIT_ROW, c))
+            }
+        }
+        while (bfsEmpty.isNotEmpty()) {
+            val (r, c) = bfsEmpty.removeFirst()
+            if (grid[r][c].kind == CellKind.EMPTY) {
+                availableEmptySlots.addLast(Pair(r, c))
+            }
+            for ((dr, dc) in neighbors) {
+                val nr = r + dr
+                val nc = c + dc
+                if (nr in 0 until GameConstants.GRID_ROWS &&
+                    nc in 0 until GameConstants.GRID_COLS &&
+                    !visitedEmpty[nr][nc] &&
+                    (grid[nr][nc].kind == CellKind.EMPTY || grid[nr][nc].kind == CellKind.BLOCK)
+                ) {
+                    visitedEmpty[nr][nc] = true
+                    bfsEmpty.addLast(Pair(nr, nc))
+                }
+            }
+        }
+
+        // Include any disconnected EMPTY cells as backup before consuming WALLs
+        for (r in GameConstants.GRID_ROWS - 1 downTo 0) {
+            for (c in colPriority) {
+                if (!visitedEmpty[r][c] && grid[r][c].kind == CellKind.EMPTY) {
+                    visitedEmpty[r][c] = true
+                    availableEmptySlots.addLast(Pair(r, c))
+                }
+            }
+        }
+
+        // Fallback WALL slots ordered outward from reachable cells / EXIT_ROW
+        val visitedWall = Array(GameConstants.GRID_ROWS) { BooleanArray(GameConstants.GRID_COLS) }
+        val bfsWall = ArrayDeque<Pair<Int, Int>>()
+        for (r in 0 until GameConstants.GRID_ROWS) {
+            for (c in colPriority) {
+                if (visitedEmpty[r][c]) {
+                    visitedWall[r][c] = true
+                    bfsWall.addLast(Pair(r, c))
+                }
+            }
+        }
+        for (c in colPriority) {
+            if (!visitedWall[GameConstants.EXIT_ROW][c] && grid[GameConstants.EXIT_ROW][c].kind == CellKind.WALL) {
+                visitedWall[GameConstants.EXIT_ROW][c] = true
+                bfsWall.addLast(Pair(GameConstants.EXIT_ROW, c))
+            }
+        }
+        while (bfsWall.isNotEmpty()) {
+            val (r, c) = bfsWall.removeFirst()
+            if (grid[r][c].kind == CellKind.WALL) {
+                fallbackWallSlots.addLast(Pair(r, c))
+            }
+            for ((dr, dc) in neighbors) {
+                val nr = r + dr
+                val nc = c + dc
+                if (nr in 0 until GameConstants.GRID_ROWS &&
+                    nc in 0 until GameConstants.GRID_COLS &&
+                    !visitedWall[nr][nc] &&
+                    grid[nr][nc].kind == CellKind.WALL
+                ) {
+                    visitedWall[nr][nc] = true
+                    bfsWall.addLast(Pair(nr, nc))
+                }
+            }
+        }
+        for (r in GameConstants.GRID_ROWS - 1 downTo 0) {
+            for (c in colPriority) {
+                if (!visitedWall[r][c] && grid[r][c].kind == CellKind.WALL) {
+                    visitedWall[r][c] = true
+                    fallbackWallSlots.addLast(Pair(r, c))
+                }
+            }
+        }
+
+        val reservedSlots = mutableMapOf<Pair<Int, Int>, Int>()
+        val itemsByColor = items.groupBy { it.color }
+
+        for ((color, colorItems) in itemsByColor) {
+            var idx = 0
+
+            // 1. Top up any exposed partial BLOCK of the same color that has < 9 balls
+            for (r in GameConstants.GRID_ROWS - 1 downTo 0) {
+                if (idx >= colorItems.size) break
+                for (c in colPriority) {
+                    if (idx >= colorItems.size) break
+                    val cell = grid[r][c]
+                    if (cell.kind == CellKind.BLOCK &&
+                        cell.color == color &&
+                        !cell.isMystery &&
+                        cell.animState != "magnet_receiving" &&
+                        isExposed(grid, r, c)
+                    ) {
+                        val pos = Pair(r, c)
+                        val alreadyUsed = reservedSlots[pos] ?: cell.ballCount.coerceIn(0, GameConstants.BALLS_PER_BLOCK)
+                        var slot = alreadyUsed
+                        while (slot < GameConstants.BALLS_PER_BLOCK && idx < colorItems.size) {
+                            cell.animState = "magnet_receiving"
+                            cell.animTimer = 0f
+                            cell.fromMagnet = true
+                            assignments.add(
+                                CleanUpBallAssignment(
+                                    item = colorItems[idx],
+                                    targetRow = r,
+                                    targetCol = c,
+                                    targetSlotIndex = slot
+                                )
+                            )
+                            slot++
+                            idx++
+                        }
+                        reservedSlots[pos] = slot
+                    }
+                }
+            }
+
+            // 2. Place remaining balls of this color into new upper container(s) (up to 9 per container)
+            while (idx < colorItems.size) {
+                val targetPos = if (availableEmptySlots.isNotEmpty()) {
+                    availableEmptySlots.removeFirst()
+                } else if (fallbackWallSlots.isNotEmpty()) {
+                    fallbackWallSlots.removeFirst()
+                } else {
+                    break
+                }
+
+                val r = targetPos.first
+                val c = targetPos.second
+                grid[r][c] = GridCell(
+                    kind = CellKind.BLOCK,
+                    color = color,
+                    ballCount = 0,
+                    animState = "magnet_receiving",
+                    animTimer = 0f,
+                    scaleX = 0.25f,
+                    scaleY = 0.25f,
+                    fromMagnet = true
+                )
+
+                var slot = 0
+                while (slot < GameConstants.BALLS_PER_BLOCK && idx < colorItems.size) {
+                    assignments.add(
+                        CleanUpBallAssignment(
+                            item = colorItems[idx],
+                            targetRow = r,
+                            targetCol = c,
+                            targetSlotIndex = slot
+                        )
+                    )
+                    slot++
+                    idx++
+                }
+                reservedSlots[targetPos] = slot
+            }
+        }
+
+        return assignments
+    }
+
+    data class CleanUpPreviewCell(
+        val row: Int,
+        val col: Int,
+        val kind: CellKind,
+        val color: MarbleColor?,
+        val isMystery: Boolean,
+        val ballCount: Int,
+        val linkGroup: Int?
+    )
+
+    data class CleanUpPreviewFunnelBall(
+        val id: Int,
+        val color: MarbleColor,
+        val x: Float,
+        val y: Float,
+        val radius: Float
+    )
+
+    data class CleanUpPreviewBeltBall(
+        val id: Int,
+        val color: MarbleColor,
+        val x: Float,
+        val y: Float,
+        val isHighlighted: Boolean,
+        val isReturned: Boolean
+    )
+
+    data class CleanUpPreviewFlight(
+        val id: Int,
+        val color: MarbleColor,
+        val startX: Float,
+        val startY: Float,
+        val controlX: Float,
+        val controlY: Float,
+        val targetX: Float,
+        val targetY: Float,
+        val targetRow: Int,
+        val targetCol: Int,
+        val targetSlotIndex: Int,
+        val delayFrac: Float
+    )
+
+    data class CleanUpPreviewSnapshot(
+        val beltCapacity: Int,
+        val beltScrollDistance: Float,
+        val initialCells: List<CleanUpPreviewCell>,
+        val targetCells: List<CleanUpPreviewCell>,
+        val funnelBalls: List<CleanUpPreviewFunnelBall>,
+        val beltBalls: List<CleanUpPreviewBeltBall>,
+        val flights: List<CleanUpPreviewFlight>
+    )
+
+    fun buildCleanUpPreviewSnapshot(
+        grid: Array<Array<GridCell>>,
+        funnelBalls: List<FunnelBall>,
+        beltBalls: List<BeltBall>,
+        highlightedBeltIds: Set<Int>,
+        beltCapacity: Int,
+        beltScrollDistance: Float = 0f
+    ): CleanUpPreviewSnapshot {
+        val crateColNormX = floatArrayOf(0.258f, 0.500f, 0.742f)
+        val crateRowNormY = floatArrayOf(0.268f, 0.488f, 0.708f)
+
+        val clonedGrid = Array(GameConstants.GRID_ROWS) { r ->
+            Array(GameConstants.GRID_COLS) { c ->
+                grid[r][c].deepCopy()
+            }
+        }
+
+        val initialCells = buildList {
+            for (r in 0 until GameConstants.GRID_ROWS) {
+                for (c in 0 until GameConstants.GRID_COLS) {
+                    val cell = clonedGrid[r][c]
+                    add(
+                        CleanUpPreviewCell(
+                            row = r,
+                            col = c,
+                            kind = cell.kind,
+                            color = cell.color,
+                            isMystery = cell.isMystery,
+                            ballCount = cell.ballCount,
+                            linkGroup = cell.linkGroup
+                        )
+                    )
+                }
+            }
+        }
+
+        val selectedBelt = if (highlightedBeltIds.isNotEmpty()) {
+            beltBalls.filter { highlightedBeltIds.contains(it.id) }.ifEmpty {
+                selectCleanUpBeltBalls(beltBalls, 8)
+            }
+        } else {
+            selectCleanUpBeltBalls(beltBalls, 8)
+        }
+        val selectedIds = selectedBelt.map { it.id }.toSet()
+
+        val cleanUpItems = buildList {
+            for (fb in funnelBalls) {
+                add(
+                    CleanUpReturnItem(
+                        id = fb.id,
+                        color = fb.color,
+                        startX = fb.x,
+                        startY = fb.y,
+                        isFromFunnel = true
+                    )
+                )
+            }
+            for (bb in selectedBelt) {
+                val coords = com.example.game.belt.BeltPath.getBeltCoordinates(bb.s)
+                add(
+                    CleanUpReturnItem(
+                        id = bb.id,
+                        color = bb.color,
+                        startX = coords.x,
+                        startY = coords.y,
+                        isFromFunnel = false
+                    )
+                )
+            }
+        }
+
+        val assignments = planCleanUpReturn(clonedGrid, cleanUpItems)
+        val returnedIds = assignments.map { it.item.id }.toSet()
+        val returnedCountsPerCell = mutableMapOf<Pair<Int, Int>, Int>()
+
+        val staggerMax = 0.22f
+        val staggerStep = if (assignments.size > 1) {
+            minOf(0.015f, staggerMax / (assignments.size - 1))
+        } else {
+            0f
+        }
+
+        val flights = assignments.mapIndexed { idx, assigned ->
+            val key = Pair(assigned.targetRow, assigned.targetCol)
+            returnedCountsPerCell[key] = (returnedCountsPerCell[key] ?: 0) + 1
+
+            val cx = GameConstants.GRID_X_CENTERS[assigned.targetCol]
+            val cy = GameConstants.GRID_Y_CENTERS[assigned.targetRow]
+            val slotRow = assigned.targetSlotIndex / 3
+            val slotCol = assigned.targetSlotIndex % 3
+            val targetX = cx + (crateColNormX[slotCol] - 0.5f) * 34f
+            val targetY = cy + (crateRowNormY[slotRow] - 0.5f) * 33f
+            val startX = assigned.item.startX
+            val startY = assigned.item.startY
+            val midX = (startX + targetX) * 0.5f
+            val arcSide = if (startX < targetX) -22f else 22f
+            val controlX = (midX + arcSide).coerceIn(22f, 274f)
+            val controlY = (startY * 0.32f + targetY * 0.68f) - 20f
+
+            CleanUpPreviewFlight(
+                id = assigned.item.id,
+                color = assigned.item.color,
+                startX = startX,
+                startY = startY,
+                controlX = controlX,
+                controlY = controlY,
+                targetX = targetX,
+                targetY = targetY,
+                targetRow = assigned.targetRow,
+                targetCol = assigned.targetCol,
+                targetSlotIndex = assigned.targetSlotIndex,
+                delayFrac = idx * staggerStep
+            )
+        }
+
+        val targetCells = buildList {
+            for (r in 0 until GameConstants.GRID_ROWS) {
+                for (c in 0 until GameConstants.GRID_COLS) {
+                    val cell = clonedGrid[r][c]
+                    val added = returnedCountsPerCell[Pair(r, c)] ?: 0
+                    val finalCount = (cell.ballCount + added).coerceIn(0, GameConstants.BALLS_PER_BLOCK)
+                    add(
+                        CleanUpPreviewCell(
+                            row = r,
+                            col = c,
+                            kind = cell.kind,
+                            color = cell.color,
+                            isMystery = cell.isMystery,
+                            ballCount = finalCount,
+                            linkGroup = cell.linkGroup
+                        )
+                    )
+                }
+            }
+        }
+
+        val previewFunnelBalls = funnelBalls.map { fb ->
+            CleanUpPreviewFunnelBall(
+                id = fb.id,
+                color = fb.color,
+                x = fb.x,
+                y = fb.y,
+                radius = fb.radius
+            )
+        }
+
+        val previewBeltBalls = beltBalls.map { bb ->
+            val coords = com.example.game.belt.BeltPath.getBeltCoordinates(bb.s)
+            CleanUpPreviewBeltBall(
+                id = bb.id,
+                color = bb.color,
+                x = coords.x,
+                y = coords.y,
+                isHighlighted = selectedIds.contains(bb.id),
+                isReturned = returnedIds.contains(bb.id)
+            )
+        }
+
+        return CleanUpPreviewSnapshot(
+            beltCapacity = beltCapacity,
+            beltScrollDistance = beltScrollDistance,
+            initialCells = initialCells,
+            targetCells = targetCells,
+            funnelBalls = previewFunnelBalls,
+            beltBalls = previewBeltBalls,
+            flights = flights
+        )
     }
 }

@@ -51,11 +51,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.game.assets.AssetLoader
+import com.example.game.lives.LifeSnapshot
+import com.example.game.lives.LivesManager
 import com.example.game.sound.SoundManager
 import com.example.ui.components.AnimatedGameLogo
 import com.example.ui.components.BottomNav
 import com.example.ui.components.GreenPlayPillButton
+import com.example.ui.components.LivesHudPill
 import com.example.ui.components.NavTab
+import com.example.ui.components.OutOfLivesModal
 import com.example.ui.components.UniversalCoinRack
 import com.example.ui.components.bouncyClickTarget
 import com.example.ui.components.bouncyScale
@@ -90,15 +94,18 @@ val SHOP_ITEMS = listOf(
 fun HomeScreen(
     levelNumber: Int,
     coins: Int,
-    playerName: String,
-    selectedAvatarId: String,
+    lifeSnapshot: LifeSnapshot = LifeSnapshot(LivesManager.MAX_LIVES, 0L, 0L),
+    playerName: String = "Player 1",
+    selectedAvatarId: String = "dragon",
     soundEnabled: Boolean,
     musicEnabled: Boolean,
     vibrationEnabled: Boolean,
     onStartGame: () -> Unit,
     onOpenColorTest: () -> Unit = {},
     onAddCoins: (Int) -> Unit,
-    onUpdateProfile: (String, String) -> Unit,
+    onWatchAdForLife: () -> Unit = {},
+    onRefillLivesWithCoins: () -> Unit = {},
+    onUpdateProfile: (String, String) -> Unit = { _, _ -> },
     onSetLevel: (Int) -> Unit,
     onToggleSound: () -> Unit,
     onToggleMusic: () -> Unit,
@@ -107,6 +114,7 @@ fun HomeScreen(
     val context = LocalContext.current
     var activeTab by remember { mutableStateOf(NavTab.HOME) }
     var isProfileModalOpen by remember { mutableStateOf(false) }
+    var showOutOfLivesModal by remember { mutableStateOf(false) }
     var activeInfoModal by remember { mutableStateOf<String?>(null) }
 
     // Bitmaps
@@ -152,20 +160,22 @@ fun HomeScreen(
                 .padding(bottom = 110.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top Header Bar (matches original game: pt-3 / top 8px, px-4 / right 10px)
+            // Top Header Bar (Profile icon top-left on Home; Lives & Coins top-right)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 4.dp),
+                    .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (activeTab == NavTab.HOME) {
-                    // Profile button: Avatar + Name Pill
                     val profilePress = rememberBouncyPressState(pressedScale = 0.90f)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                    Box(
                         modifier = Modifier
+                            .size(52.dp)
+                            .shadow(8.dp, RoundedCornerShape(14.dp))
+                            .border(3.dp, Color(0xFFFFD700), RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(14.dp))
                             .bouncyScale(profilePress)
                             .testTag("profile_button")
                             .bouncyClickTarget(profilePress) {
@@ -173,38 +183,11 @@ fun HomeScreen(
                                 isProfileModalOpen = true
                             }
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .shadow(8.dp, RoundedCornerShape(14.dp))
-                                .border(3.dp, Color(0xFFFFD700), RoundedCornerShape(14.dp))
-                                .clip(RoundedCornerShape(14.dp))
-                        ) {
-                            if (currentAvatarBitmap != null) {
-                                Image(
-                                    bitmap = currentAvatarBitmap.asImageBitmap(),
-                                    contentDescription = playerName,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xD9002766), RoundedCornerShape(22.dp))
-                                .border(2.5.dp, Color(0xFFFFD700), RoundedCornerShape(22.dp))
-                                .padding(horizontal = 16.dp, vertical = 7.dp)
-                        ) {
-                            Text(
-                                text = playerName,
-                                fontFamily = FredokaFontFamily,
-                                fontWeight = FontWeight.Black,
-                                fontSize = 15.sp,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                        if (currentAvatarBitmap != null) {
+                            Image(
+                                bitmap = currentAvatarBitmap.asImageBitmap(),
+                                contentDescription = playerName,
+                                modifier = Modifier.fillMaxSize()
                             )
                         }
                     }
@@ -234,8 +217,30 @@ fun HomeScreen(
                     )
                 }
 
-                // Top-Right Coin rack on ALL tabs (Home, Shop, Settings)
-                UniversalCoinRack(coinRackBitmap, coins)
+                // Top-Right Pills (Lives + Coins on Home; Coins on Shop/Settings)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (activeTab == NavTab.HOME) {
+                        LivesHudPill(
+                            lifeSnapshot = lifeSnapshot,
+                            compact = true,
+                            onClick = { showOutOfLivesModal = true }
+                        )
+                    }
+                    UniversalCoinRack(
+                        bitmap = coinRackBitmap,
+                        coins = coins,
+                        compact = true,
+                        showPlusButton = activeTab != NavTab.SHOP,
+                        onPlusClick = if (activeTab != NavTab.SHOP) {
+                            { activeTab = NavTab.SHOP }
+                        } else {
+                            null
+                        }
+                    )
+                }
             }
 
             // Divider for Shop / Settings
@@ -286,7 +291,11 @@ fun HomeScreen(
                             testTag = "play_button",
                             onClick = {
                                 SoundManager.playTap()
-                                onStartGame()
+                                if (lifeSnapshot.lives > 0) {
+                                    onStartGame()
+                                } else {
+                                    showOutOfLivesModal = true
+                                }
                             }
                         )
 
@@ -394,6 +403,23 @@ fun HomeScreen(
                     onSetLevel(newLevel)
                     isProfileModalOpen = false
                 }
+            )
+        }
+
+        // Out of Lives / Life Refill Modal
+        if (showOutOfLivesModal) {
+            OutOfLivesModal(
+                lifeSnapshot = lifeSnapshot,
+                coins = coins,
+                onWatchAdForLife = {
+                    onWatchAdForLife()
+                    showOutOfLivesModal = false
+                },
+                onCoinsRefillAll = {
+                    onRefillLivesWithCoins()
+                    showOutOfLivesModal = false
+                },
+                onDismiss = { showOutOfLivesModal = false }
             )
         }
 

@@ -1,7 +1,9 @@
 package com.example
 
+import com.example.game.belt.BeltPath
 import com.example.game.constants.GameConstants
 import com.example.game.levels.LevelGenerator
+import com.example.game.lives.LivesManager
 import com.example.game.model.BeltBall
 import com.example.game.model.Brick
 import com.example.game.model.BrickColumn
@@ -193,8 +195,6 @@ class ExampleUnitTest {
             BrickColumn(x = 115f, bricks = mutableListOf(frontCyan, behindRed))
         )
 
-        // 4 RED balls (2 go to frontRed since filled=1, 2 spill into behindRed at depth 1!)
-        // 1 YELLOW ball (no matching bucket -> targetBrick null, still included to clear belt 100%)
         val belt = listOf(
             BeltBall(id = 1, color = MarbleColor.RED, slotIndex = 0, s = 10f),
             BeltBall(id = 2, color = MarbleColor.RED, slotIndex = 1, s = 20f),
@@ -207,18 +207,15 @@ class ExampleUnitTest {
         assertEquals(5, assignments.size)
         assertEquals(belt.map { it.id }, assignments.map { it.beltBall.id })
 
-        // First two RED balls fill remaining 2 holes of frontRed
         assertSame(frontRed, assignments[0].targetBrick)
         assertSame(frontRed, assignments[1].targetBrick)
         assertEquals(2, frontRed.inFlight)
 
-        // Next two RED balls seamlessly target behindRed (queued behind frontCyan!)
         assertSame(behindRed, assignments[2].targetBrick)
         assertSame(behindRed, assignments[3].targetBrick)
         assertEquals(1, assignments[2].targetCol)
         assertEquals(2, behindRed.inFlight)
 
-        // Unmatched YELLOW ball is still returned for firework pop with no bucket target
         assertNull(assignments[4].targetBrick)
         assertEquals(-1, assignments[4].targetCol)
     }
@@ -230,7 +227,6 @@ class ExampleUnitTest {
             assertEquals(4, data.columns.size)
             assertTrue("Level $lvl has empty column", data.columns.all { it.isNotEmpty() })
 
-            // 1. Exact 1:3 block-to-bucket balance per color
             val expectedBucketsByColor = mutableMapOf<MarbleColor, Int>()
             for (r in 0 until GameConstants.GRID_ROWS) {
                 for (c in 0 until GameConstants.GRID_COLS) {
@@ -248,7 +244,6 @@ class ExampleUnitTest {
             val actualBucketsByColor = data.columns.flatten().groupingBy { it }.eachCount()
             assertEquals("Level $lvl bucket balance mismatch", expectedBucketsByColor, actualBucketsByColor)
 
-            // 2. Simulate clearing all exposed blocks (including linked pairs) step-by-step -> 0 blocks/locked/queued left
             val simGrid = Array(GameConstants.GRID_ROWS) { r ->
                 Array(GameConstants.GRID_COLS) { c -> data.grid[r][c].deepCopy() }
             }
@@ -288,10 +283,8 @@ class ExampleUnitTest {
         val grid = Array(GameConstants.GRID_ROWS) {
             Array(GameConstants.GRID_COLS) { GridCell(kind = CellKind.WALL) }
         }
-        // Row 5 (exit row): exposed BLOCK at (5,1), linked horizontally to LOCKED (5,2)? No, put vertical pair (4,2)-(5,2) and hidden pair (2,2)-(2,3)
         grid[5][2] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.BLUE, linkGroup = 1)
         grid[4][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.YELLOW, linkGroup = 1)
-        // Unexposed linked pair higher up
         grid[2][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.ORANGE, linkGroup = 2)
         grid[2][3] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED, linkGroup = 2)
 
@@ -346,7 +339,6 @@ class ExampleUnitTest {
         val grid = Array(GameConstants.GRID_ROWS) {
             Array(GameConstants.GRID_COLS) { GridCell(kind = CellKind.WALL) }
         }
-        // Dispensers blocking upper row 2, open path along row 5 -> (4,2)
         grid[2][2] = GridCell(kind = CellKind.DISPENSER, counter = 0)
         grid[2][3] = GridCell(kind = CellKind.DISPENSER, counter = 0)
         grid[4][2] = GridCell(kind = CellKind.EMPTY)
@@ -410,7 +402,6 @@ class ExampleUnitTest {
         val grid = Array(GameConstants.GRID_ROWS) {
             Array(GameConstants.GRID_COLS) { GridCell(kind = CellKind.WALL) }
         }
-        // Dispenser at (3,5) facing DOWN toward (4,5); adjacent LOCKED mystery bucket at (4,4)
         grid[3][5] = GridCell(
             kind = CellKind.DISPENSER,
             counter = 1,
@@ -420,7 +411,6 @@ class ExampleUnitTest {
         grid[4][5] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.BLUE)
         grid[5][5] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.RED)
 
-        // 1. Tap front block (4,5) while dispenser still has 1 bucket left -> dispenser refills (4,5)
         grid[4][5] = GridCell(kind = CellKind.EMPTY)
         val firstRes = GameRules.updateGridAfterChange(grid)
         assertEquals(1, firstRes.dispensedCells.size)
@@ -428,13 +418,10 @@ class ExampleUnitTest {
         assertEquals(CellKind.BLOCK, grid[4][5].kind)
         assertEquals(MarbleColor.ORANGE, grid[4][5].color)
         assertEquals(0, grid[3][5].counter)
-        // Adjacent locked bucket MUST remain LOCKED & covered while slot (4,5) is refilled!
         assertEquals(CellKind.LOCKED, grid[4][4].kind)
         assertTrue(grid[4][4].isMystery)
         assertTrue(!GameRules.isExposed(grid, 4, 4))
 
-        // 2. Now dispenser is empty (counter == 0); pop the last bucket at (4,5) -> (4,5) stays EMPTY,
-        // so (4,4) unlocks AND removes cover/mystery at the exact same moment!
         grid[4][5] = GridCell(kind = CellKind.EMPTY)
         val secondRes = GameRules.updateGridAfterChange(grid)
         assertTrue(secondRes.dispensedCells.isEmpty())
@@ -449,7 +436,6 @@ class ExampleUnitTest {
         val grid = Array(GameConstants.GRID_ROWS) {
             Array(GameConstants.GRID_COLS) { GridCell(kind = CellKind.WALL) }
         }
-        // Only a vertical pocket of EMPTY slots (5,2), (4,2), (3,2) surrounded by WALL/LOCKED
         grid[5][2] = GridCell(kind = CellKind.EMPTY)
         grid[4][2] = GridCell(kind = CellKind.EMPTY)
         grid[3][2] = GridCell(kind = CellKind.EMPTY)
@@ -464,15 +450,238 @@ class ExampleUnitTest {
         val assignments = GameRules.planMagnetReturn(grid, belt)
         assertEquals(18, assignments.size)
 
-        // All 3 buckets created up top at (5,2), (4,2), and (3,2) — even middle (4,2) with no empty neighbor —
-        // MUST be BLOCK (unlocked) and exposed/clickable!
         for (r in listOf(5, 4, 3)) {
             val cell = grid[r][2]
             assertEquals(CellKind.BLOCK, cell.kind)
             assertTrue(cell.fromMagnet)
             assertTrue("Magnet bucket at ($r,2) should stay unlocked", GameRules.isExposed(grid, r, 2))
         }
-        // Surrounding original LOCKED cell remains untouched/locked
         assertEquals(CellKind.LOCKED, grid[4][1].kind)
+    }
+
+    @Test
+    fun chainFullAndStuck_detectsOnlyWhenBeltFullAndNoFrontBucketMatches() {
+        val columns = listOf(
+            BrickColumn(x = 69f, bricks = mutableListOf(Brick(color = MarbleColor.RED, filled = 0))),
+            BrickColumn(x = 122f, bricks = mutableListOf(Brick(color = MarbleColor.CYAN, filled = 1))),
+            BrickColumn(x = 175f, bricks = mutableListOf(Brick(color = MarbleColor.YELLOW, filled = 0))),
+            BrickColumn(x = 227f, bricks = mutableListOf(Brick(color = MarbleColor.PURPLE, filled = 0)))
+        )
+
+        val beltNotFull = (1..23).map { i ->
+            BeltBall(id = i, color = MarbleColor.ORANGE, slotIndex = i - 1, s = i * 17f)
+        }
+        assertTrue(!GameRules.isChainFullAndStuck(beltNotFull, 24, columns, 0, 0, false, false))
+
+        val beltFullNoMatch = (1..24).map { i ->
+            BeltBall(id = i, color = if (i <= 16) MarbleColor.ORANGE else MarbleColor.BLUE, slotIndex = i - 1, s = i * 17f)
+        }
+        assertTrue(GameRules.isChainFullAndStuck(beltFullNoMatch, 24, columns, 0, 0, false, false))
+
+        val beltWithOneMatch = beltFullNoMatch.dropLast(1) + BeltBall(id = 99, color = MarbleColor.CYAN, slotIndex = 23, s = 100f)
+        assertTrue(!GameRules.isChainFullAndStuck(beltWithOneMatch, 24, columns, 0, 0, false, false))
+
+        columns[0].bricks[0].animState = "vanish"
+        assertTrue(!GameRules.isChainFullAndStuck(beltFullNoMatch, 24, columns, 0, 0, false, false))
+    }
+
+    @Test
+    fun selectCleanUpBeltBalls_picksEightBallsFromTopStraightLane() {
+        val spacing = BeltPath.TOTAL_PATH_LEN / 24f
+        val belt = (0 until 24).map { idx ->
+            BeltBall(
+                id = idx + 1,
+                color = if (idx % 2 == 0) MarbleColor.ORANGE else MarbleColor.BLUE,
+                slotIndex = idx,
+                s = idx * spacing
+            )
+        }
+
+        val selected = GameRules.selectCleanUpBeltBalls(belt, 8)
+        assertEquals(8, selected.size)
+        for (ball in selected) {
+            val coords = BeltPath.getBeltCoordinates(ball.s)
+            assertTrue("Expected top lane ball, got bottom lane at s=${ball.s}", !coords.isBottomLane)
+        }
+    }
+
+    @Test
+    fun planCleanUpReturn_returnsAllFunnelBallsPlusEightChainBallsWithoutLoss() {
+        val grid = Array(GameConstants.GRID_ROWS) {
+            Array(GameConstants.GRID_COLS) { GridCell(kind = CellKind.WALL) }
+        }
+        grid[5][2] = GridCell(kind = CellKind.EMPTY)
+        grid[5][3] = GridCell(kind = CellKind.EMPTY)
+        grid[4][2] = GridCell(kind = CellKind.EMPTY)
+        grid[4][3] = GridCell(kind = CellKind.EMPTY)
+
+        val items = buildList {
+            for (i in 1..12) {
+                add(GameRules.CleanUpReturnItem(id = i, color = MarbleColor.ORANGE, startX = 148f, startY = 410f, isFromFunnel = true))
+            }
+            for (i in 13..24) {
+                add(GameRules.CleanUpReturnItem(id = i, color = MarbleColor.BLUE, startX = 148f, startY = 420f, isFromFunnel = true))
+            }
+            for (i in 25..32) {
+                add(GameRules.CleanUpReturnItem(id = i, color = MarbleColor.PINK, startX = 120f + i, startY = 462.5f, isFromFunnel = false))
+            }
+        }
+
+        val assignments = GameRules.planCleanUpReturn(grid, items)
+        assertEquals(32, assignments.size)
+        val byColor = assignments.groupBy { it.item.color }
+        assertEquals(12, byColor[MarbleColor.ORANGE]?.size)
+        assertEquals(12, byColor[MarbleColor.BLUE]?.size)
+        assertEquals(8, byColor[MarbleColor.PINK]?.size)
+    }
+
+    @Test
+    fun buildCleanUpPreviewSnapshot_simulatesExactPostAdStateWithoutMutatingLiveGrid() {
+        val grid = Array(GameConstants.GRID_ROWS) {
+            Array(GameConstants.GRID_COLS) { GridCell(kind = CellKind.EMPTY) }
+        }
+        grid[0][0] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.ORANGE, ballCount = 9)
+
+        val funnel = listOf(
+            com.example.game.model.FunnelBall(1, MarbleColor.BLUE, 140f, 410f, 0f, 0f),
+            com.example.game.model.FunnelBall(2, MarbleColor.BLUE, 155f, 418f, 0f, 0f)
+        )
+        val belt = (0 until 24).map { idx ->
+            BeltBall(
+                id = 100 + idx,
+                color = if (idx < 8) MarbleColor.LIME else MarbleColor.RED,
+                slotIndex = idx,
+                s = idx * (BeltPath.TOTAL_PATH_LEN / 24f)
+            )
+        }
+        val selectedIds = GameRules.selectCleanUpBeltBalls(belt, 8).map { it.id }.toSet()
+
+        val snapshot = GameRules.buildCleanUpPreviewSnapshot(
+            grid = grid,
+            funnelBalls = funnel,
+            beltBalls = belt,
+            highlightedBeltIds = selectedIds,
+            beltCapacity = 24
+        )
+
+        // Original grid must remain untouched (still EMPTY at [5][2])
+        assertEquals(CellKind.EMPTY, grid[5][2].kind)
+        // Snapshot captures 2 funnel balls + 8 selected chain balls = 10 flights
+        assertEquals(10, snapshot.flights.size)
+        assertEquals(2, snapshot.funnelBalls.size)
+        assertEquals(24, snapshot.beltBalls.size)
+        assertEquals(8, snapshot.beltBalls.count { it.isHighlighted })
+        assertEquals(16, snapshot.beltBalls.count { !it.isReturned })
+        // Target cells should contain the newly created container(s) while initialCells stayed EMPTY
+        assertEquals(
+            CellKind.EMPTY,
+            snapshot.initialCells.first { it.row == 5 && it.col == 2 }.kind
+        )
+        assertEquals(
+            CellKind.BLOCK,
+            snapshot.targetCells.first { it.row == 5 && it.col == 2 }.kind
+        )
+    }
+
+    @Test
+    fun targetBeltSpeed_increasesOnlyWhenUpperGridBucketsAreCleared() {
+        val grid = Array(GameConstants.GRID_ROWS) {
+            Array(GameConstants.GRID_COLS) { GridCell(kind = CellKind.EMPTY) }
+        }
+        grid[0][0] = GridCell(kind = CellKind.WALL)
+        grid[1][1] = GridCell(kind = CellKind.DISPENSER, counter = 0)
+
+        // Only WALL + exhausted DISPENSER + EMPTY -> upper buckets cleared -> fast speed
+        assertEquals(true, GameRules.areUpperBucketsCleared(grid))
+        assertEquals(GameConstants.BELT_SPEED_FAST, GameRules.targetBeltSpeed(grid), 0.01f)
+
+        // While balls are returning via Magnet/CleanUp, speed stays normal
+        assertEquals(
+            GameConstants.BELT_SPEED,
+            GameRules.targetBeltSpeed(grid, hasReturningBalls = true),
+            0.01f
+        )
+
+        // Active DISPENSER -> not cleared
+        grid[1][1] = GridCell(
+            kind = CellKind.DISPENSER,
+            counter = 1,
+            queue = mutableListOf(MarbleColor.BLUE)
+        )
+        assertEquals(false, GameRules.areUpperBucketsCleared(grid))
+        assertEquals(GameConstants.BELT_SPEED, GameRules.targetBeltSpeed(grid), 0.01f)
+
+        // LOCKED crate -> not cleared
+        grid[1][1] = GridCell(kind = CellKind.EMPTY)
+        grid[2][2] = GridCell(kind = CellKind.LOCKED, color = MarbleColor.RED)
+        assertEquals(false, GameRules.areUpperBucketsCleared(grid))
+        assertEquals(GameConstants.BELT_SPEED, GameRules.targetBeltSpeed(grid), 0.01f)
+
+        // Regular BLOCK -> not cleared
+        grid[2][2] = GridCell(kind = CellKind.BLOCK, color = MarbleColor.ORANGE)
+        assertEquals(false, GameRules.areUpperBucketsCleared(grid))
+        assertEquals(GameConstants.BELT_SPEED, GameRules.targetBeltSpeed(grid), 0.01f)
+
+        // Clearing last BLOCK -> speeds up
+        grid[2][2] = GridCell(kind = CellKind.EMPTY)
+        assertEquals(true, GameRules.areUpperBucketsCleared(grid))
+        assertEquals(GameConstants.BELT_SPEED_FAST, GameRules.targetBeltSpeed(grid), 0.01f)
+    }
+
+    @Test
+    fun livesManager_consumesAndRefillsEvery20Minutes() {
+        val t0 = 1_000_000L
+
+        // Start full (5 lives) -> status is "Full"
+        val full = LivesManager.reconcileLives(5, 0L, t0)
+        assertEquals(5, full.lives)
+        assertEquals("Full", LivesManager.formatStatusText(full))
+
+        // Losing 1 life drops 5 -> 4 and starts a 20:00 timer
+        val afterFirstLoss = LivesManager.consumeOneLife(full.lives, full.nextRefillAtMs, t0)
+        assertEquals(4, afterFirstLoss.lives)
+        assertEquals(t0 + LivesManager.REFILL_DURATION_MS, afterFirstLoss.nextRefillAtMs)
+        assertEquals("20:00", LivesManager.formatStatusText(afterFirstLoss))
+
+        // 1 second later -> 19:59
+        val oneSecLater = LivesManager.reconcileLives(
+            afterFirstLoss.lives,
+            afterFirstLoss.nextRefillAtMs,
+            t0 + 1000L
+        )
+        assertEquals(4, oneSecLater.lives)
+        assertEquals("19:59", LivesManager.formatStatusText(oneSecLater))
+
+        // Losing another life at +5 minutes preserves the original countdown (now 15:00 remaining)
+        val fiveMinLaterMs = t0 + 5L * 60L * 1000L
+        val afterSecondLoss = LivesManager.consumeOneLife(
+            afterFirstLoss.lives,
+            afterFirstLoss.nextRefillAtMs,
+            fiveMinLaterMs
+        )
+        assertEquals(3, afterSecondLoss.lives)
+        assertEquals(afterFirstLoss.nextRefillAtMs, afterSecondLoss.nextRefillAtMs)
+        assertEquals("15:00", LivesManager.formatStatusText(afterSecondLoss))
+
+        // At +20 minutes -> +1 life (3 -> 4), next timer still has 20:00 left
+        val twentyMinMs = t0 + LivesManager.REFILL_DURATION_MS
+        val refilledOne = LivesManager.reconcileLives(
+            afterSecondLoss.lives,
+            afterSecondLoss.nextRefillAtMs,
+            twentyMinMs
+        )
+        assertEquals(4, refilledOne.lives)
+        assertEquals("20:00", LivesManager.formatStatusText(refilledOne))
+
+        // At +40 minutes -> back to 5 ("Full")
+        val fortyMinMs = t0 + 2L * LivesManager.REFILL_DURATION_MS
+        val refilledAll = LivesManager.reconcileLives(
+            afterSecondLoss.lives,
+            afterSecondLoss.nextRefillAtMs,
+            fortyMinMs
+        )
+        assertEquals(5, refilledAll.lives)
+        assertEquals(0L, refilledAll.nextRefillAtMs)
+        assertEquals("Full", LivesManager.formatStatusText(refilledAll))
     }
 }

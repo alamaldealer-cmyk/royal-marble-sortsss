@@ -113,7 +113,19 @@ object AssetLoader {
             "cave/dispenser_hood_2.png",
             "cave/dispenser_hood_3.png",
             "cave/dispenser_hood_4.png",
-            "cave/dispenser_hood_5.png"
+            "cave/dispenser_hood_5.png",
+            "cleanup/btn_quit.png",
+            "cleanup/btn_cleanup_watch_ad.png",
+            "cleanup/btn_cleanup_coins.png",
+            "cleanup/btn_close_x.png",
+            "cleanup/panel_out_of_space.png",
+            "cleanup/btn_play_on_watch_ad.png",
+            "cleanup/btn_play_on_coins.png",
+            "hud/hud_bar_life.png",
+            "hud/hud_bar_coin.png",
+            "hud/hud_coin.png",
+            "hud/hud_heart.png",
+            "hud/hud_plus.png"
         )
         for (path in criticalAssets) {
             loadBitmap(context, path)

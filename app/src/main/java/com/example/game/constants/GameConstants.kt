@@ -10,6 +10,8 @@ object GameConstants {
 
     const val BALLS_PER_BLOCK = 9
     const val BELT_SPEED = 120f // px/s
+    const val BELT_SPEED_BOOST_MULTIPLIER = 2.6f
+    const val BELT_SPEED_FAST = BELT_SPEED * BELT_SPEED_BOOST_MULTIPLIER // 312f px/s
     const val BELT_CAPACITY = 24
     const val UPGRADED_BELT_CAPACITY = 30
     const val GRAVITY = 1000f // px/s^2 down
@@ -36,6 +38,7 @@ object GameConstants {
     const val BALL_RADIUS_FUNNEL = 7.9f
     const val BALL_RADIUS_BELT = 8.0f
     const val MIN_DROP_INTERVAL_MS = 60L
+    const val MIN_DROP_INTERVAL_FAST_MS = 32L
 
     const val GRID_COLS = 6
     const val GRID_ROWS = 6

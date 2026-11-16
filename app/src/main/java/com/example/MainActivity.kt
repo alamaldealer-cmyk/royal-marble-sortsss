@@ -32,6 +32,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.game.assets.AssetLoader
+import com.example.game.lives.LifeSnapshot
+import com.example.game.lives.LivesManager
 import com.example.game.sound.SoundManager
 import com.example.game.story.StoryCatalog
 import com.example.game.story.StoryEpisode
@@ -41,6 +43,7 @@ import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.SplashScreen
 import com.example.ui.screens.StoryCutsceneScreen
 import com.example.ui.theme.MyApplicationTheme
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -73,6 +76,11 @@ fun RoyalMarblesApp() {
         mutableIntStateOf(prefs.getInt("coins", 19330))
     }
 
+    var lifeSnapshot by remember {
+        mutableStateOf(LivesManager.load(prefs))
+    }
+    var activeLevelWon by remember { mutableStateOf(false) }
+
     // Start at level 1 on refresh / launch as requested
     var currentLevel by remember {
         mutableIntStateOf(1)
@@ -100,6 +108,64 @@ fun RoyalMarblesApp() {
 
     val lifecycleOwner = LocalLifecycleOwner.current
 
+    fun refreshLives(nowMs: Long = System.currentTimeMillis()): LifeSnapshot {
+        val updated = LivesManager.reconcileLives(
+            lives = lifeSnapshot.lives,
+            nextRefillAtMs = lifeSnapshot.nextRefillAtMs,
+            nowMs = nowMs
+        )
+        if (updated != lifeSnapshot) {
+            lifeSnapshot = updated
+            LivesManager.save(prefs, updated)
+        }
+        return updated
+    }
+
+    fun loseOneLife() {
+        val updated = LivesManager.consumeOneLife(
+            lives = lifeSnapshot.lives,
+            nextRefillAtMs = lifeSnapshot.nextRefillAtMs,
+            nowMs = System.currentTimeMillis()
+        )
+        lifeSnapshot = updated
+        LivesManager.save(prefs, updated)
+    }
+
+    fun gainOneLife() {
+        val updated = LivesManager.addOneLife(
+            lives = lifeSnapshot.lives,
+            nextRefillAtMs = lifeSnapshot.nextRefillAtMs,
+            nowMs = System.currentTimeMillis()
+        )
+        lifeSnapshot = updated
+        LivesManager.save(prefs, updated)
+    }
+
+    fun refillAllLives() {
+        val updated = LivesManager.refillAllLives()
+        lifeSnapshot = updated
+        LivesManager.save(prefs, updated)
+    }
+
+    // 1-second live countdown ticker while lives < 5
+    LaunchedEffect(lifeSnapshot.isFull, lifeSnapshot.nextRefillAtMs) {
+        if (!lifeSnapshot.isFull) {
+            while (true) {
+                delay(1000L)
+                val updated = LivesManager.reconcileLives(
+                    lives = lifeSnapshot.lives,
+                    nextRefillAtMs = lifeSnapshot.nextRefillAtMs,
+                    nowMs = System.currentTimeMillis()
+                )
+                lifeSnapshot = updated
+                if (updated.isFull) {
+                    LivesManager.save(prefs, updated)
+                    break
+                }
+            }
+        }
+    }
+
     // Sync sound & music settings
     LaunchedEffect(soundEnabled) {
         SoundManager.init(context)
@@ -114,7 +180,10 @@ fun RoyalMarblesApp() {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> SoundManager.onAppPaused()
-                Lifecycle.Event.ON_RESUME -> SoundManager.onAppResumed(context)
+                Lifecycle.Event.ON_RESUME -> {
+                    SoundManager.onAppResumed(context)
+                    refreshLives()
+                }
                 else -> Unit
             }
         }
@@ -150,6 +219,9 @@ fun RoyalMarblesApp() {
     }
 
     fun startPlayingWithOptionalStory(targetLevel: Int) {
+        val latestLives = refreshLives()
+        if (latestLives.lives <= 0) return
+        activeLevelWon = false
         val story = StoryCatalog.storyForStartingLevel(targetLevel)
         if (story != null) {
             activeStory = story
@@ -180,6 +252,9 @@ fun RoyalMarblesApp() {
                         episode = episode,
                         levelToStart = currentLevel,
                         onComplete = {
+                            if (!storyReturnToHome) {
+                                activeLevelWon = false
+                            }
                             currentView = if (storyReturnToHome) "home" else "playing"
                         }
                     )
@@ -187,6 +262,9 @@ fun RoyalMarblesApp() {
 
                 "playing" -> {
                     BackHandler {
+                        if (!activeLevelWon) {
+                            loseOneLife()
+                        }
                         currentView = "home"
                     }
 
@@ -194,9 +272,13 @@ fun RoyalMarblesApp() {
                         GameBoardScreen(
                             levelNumber = currentLevel,
                             coins = coins,
+                            lifeSnapshot = lifeSnapshot,
                             onReturnHome = { currentView = "home" },
+                            onLoseLife = { loseOneLife() },
+                            onLevelWon = { activeLevelWon = true },
                             onAddCoins = { amount -> saveCoins(coins + amount) },
                             onLevelAdvanced = { nextLvl ->
+                                activeLevelWon = false
                                 if (nextLvl > 100) {
                                     saveLevel(1)
                                     activeStory = StoryCatalog.grandFinale
@@ -226,6 +308,7 @@ fun RoyalMarblesApp() {
                     HomeScreen(
                         levelNumber = currentLevel,
                         coins = coins,
+                        lifeSnapshot = lifeSnapshot,
                         playerName = playerName,
                         selectedAvatarId = selectedAvatarId,
                         soundEnabled = soundEnabled,
@@ -234,6 +317,13 @@ fun RoyalMarblesApp() {
                         onStartGame = { startPlayingWithOptionalStory(currentLevel) },
                         onOpenColorTest = { currentView = "color_test" },
                         onAddCoins = { amount -> saveCoins(coins + amount) },
+                        onWatchAdForLife = { gainOneLife() },
+                        onRefillLivesWithCoins = {
+                            if (coins >= LivesManager.REFILL_COIN_COST) {
+                                saveCoins(coins - LivesManager.REFILL_COIN_COST)
+                                refillAllLives()
+                            }
+                        },
                         onUpdateProfile = { newName, newAvatarId -> saveProfile(newName, newAvatarId) },
                         onSetLevel = { newLevel -> saveLevel(newLevel) },
                         onToggleSound = {
