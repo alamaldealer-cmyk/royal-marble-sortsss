@@ -51,7 +51,7 @@ class ExampleRobolectricTest {
   fun `read string from context`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val appName = context.getString(R.string.app_name)
-    assertEquals("Royal Marbles", appName)
+    assertEquals("Floofies Sort", appName)
   }
 
   @Test
@@ -365,7 +365,7 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `gameBoardScreen deducts a life when returning home via pause menu`() {
+  fun `gameBoardScreen shows lose-life warning and level failed modal before returning home via pause menu`() {
     var returnedHome = false
     var lifeLost = false
 
@@ -390,9 +390,29 @@ class ExampleRobolectricTest {
     composeTestRule.mainClock.advanceTimeByFrame()
     composeTestRule.onNodeWithContentDescription("Home").assertIsDisplayed()
     composeTestRule.onNodeWithContentDescription("Home").performClick()
+    composeTestRule.mainClock.advanceTimeBy(300L)
     composeTestRule.mainClock.advanceTimeByFrame()
 
+    // First popup: Lose-Life Warning ("You will lose a life!")
+    composeTestRule.onNodeWithTag("lose_life_warning_modal").assertIsDisplayed()
+    composeTestRule.onNodeWithText("You will lose a life!").assertIsDisplayed()
+    assertEquals(false, lifeLost)
+    assertEquals(false, returnedHome)
+
+    // Confirming Quit deducts 1 life and opens Level Failed modal with Try Again
+    composeTestRule.onNodeWithTag("leave_level_quit_button").performClick()
+    composeTestRule.mainClock.advanceTimeBy(350L)
+    composeTestRule.mainClock.advanceTimeByFrame()
     assertEquals(true, lifeLost)
+    assertEquals(false, returnedHome)
+
+    composeTestRule.onNodeWithTag("level_failed_modal").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Level Failed!").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("level_failed_try_again_button").assertIsDisplayed()
+
+    // Pressing X on Level Failed modal returns to Home screen
+    composeTestRule.onNodeWithTag("level_failed_close_button").performClick()
+    composeTestRule.mainClock.advanceTimeByFrame()
     assertEquals(true, returnedHome)
   }
 
@@ -641,5 +661,114 @@ class ExampleRobolectricTest {
     }
     composeTestRule.mainClock.advanceTimeByFrame()
     assertEquals(1, outOfSpaceCloseCount)
+  }
+
+  @Test
+  fun `shopTab displays animated shop awning banner at the top above coin items`() {
+    composeTestRule.mainClock.autoAdvance = false
+    composeTestRule.setContent {
+      MyApplicationTheme {
+        HomeScreen(
+          levelNumber = 1,
+          coins = 1820,
+          soundEnabled = true,
+          musicEnabled = false,
+          vibrationEnabled = true,
+          onStartGame = {},
+          onAddCoins = {},
+          onSetLevel = {},
+          onToggleSound = {},
+          onToggleMusic = {},
+          onToggleVibration = {}
+        )
+      }
+    }
+
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.mainClock.advanceTimeByFrame()
+
+    composeTestRule.onNodeWithTag("nav_tab_shop").performClick()
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.mainClock.advanceTimeBy(400L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+
+    composeTestRule.onNodeWithTag("shop_awning_banner").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("Shop Awning").assertIsDisplayed()
+    composeTestRule.onNodeWithText("SHOP").assertIsDisplayed()
+    composeTestRule.onNodeWithText("1.000").assertIsDisplayed()
+
+    val rootBounds = composeTestRule.onRoot().fetchSemanticsNode().boundsInRoot
+    val awningBounds = composeTestRule.onNodeWithTag("shop_awning_banner").fetchSemanticsNode().boundsInRoot
+    val firstItemBounds = composeTestRule.onNodeWithText("1.000").fetchSemanticsNode().boundsInRoot
+    assertEquals(0f, awningBounds.top, 2f)
+    assertEquals(0f, awningBounds.left, 2f)
+    assertEquals(rootBounds.right, awningBounds.right, 2f)
+    org.junit.Assert.assertTrue(awningBounds.bottom <= firstItemBounds.top + 2f)
+  }
+
+  @Test
+  fun `loseLifeWarningModal and levelFailedModal transition cleanly to try again and home`() {
+    var step by mutableIntStateOf(0) // 0 = warning, 1 = failed
+    var triedAgain = false
+    var returnedHome = false
+    var plusOneLifeAdded = false
+
+    composeTestRule.mainClock.autoAdvance = false
+    composeTestRule.setContent {
+      MyApplicationTheme {
+        if (step == 0) {
+          com.example.ui.components.LoseLifeWarningModal(
+            mode = com.example.ui.components.LoseLifeWarningMode.OUT_OF_SPACE,
+            coins = 1000,
+            onConfirmLoseLife = { step = 1 }
+          )
+        } else {
+          com.example.ui.components.LevelFailedModal(
+            levelNumber = 11,
+            beforeLives = 4,
+            lifeSnapshot = LifeSnapshot(lives = 3, nextRefillAtMs = 721_000L, remainingMs = 721_000L),
+            onWatchAdPlusOneLife = { plusOneLifeAdded = true },
+            onTryAgain = { triedAgain = true },
+            onCloseToHome = { returnedHome = true }
+          )
+        }
+      }
+    }
+
+    composeTestRule.mainClock.advanceTimeBy(300L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.onNodeWithTag("lose_life_warning_modal").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Out of Space!").assertIsDisplayed()
+    composeTestRule.onNodeWithText("-1").assertIsDisplayed()
+    composeTestRule.onNodeWithText("You will lose a life!").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("lose_life_watch_ad_button").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("lose_life_coins_button").assertIsDisplayed()
+
+    // Pressing X opens Level Failed modal with 5 hearts + Try Again
+    composeTestRule.onNodeWithTag("lose_life_warning_close_button").performClick()
+    composeTestRule.mainClock.advanceTimeBy(700L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+    assertEquals(1, step)
+
+    composeTestRule.onNodeWithTag("level_failed_modal").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Level 11").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("level_failed_hearts_row").assertIsDisplayed()
+    composeTestRule.onNodeWithText("3").assertIsDisplayed()
+    composeTestRule.onNodeWithText("12m 01s").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Level Failed!").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("level_failed_watch_ad_button").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("level_failed_try_again_button").assertIsDisplayed()
+
+    // Clicking Try Again triggers level restart callback
+    composeTestRule.onNodeWithTag("level_failed_try_again_button").performClick()
+    composeTestRule.mainClock.advanceTimeByFrame()
+    assertEquals(true, triedAgain)
+    assertEquals(false, returnedHome)
+    assertEquals(false, plusOneLifeAdded)
+
+    // Clicking X triggers return home callback
+    composeTestRule.onNodeWithTag("level_failed_close_button").performClick()
+    composeTestRule.mainClock.advanceTimeByFrame()
+    assertEquals(true, returnedHome)
   }
 }

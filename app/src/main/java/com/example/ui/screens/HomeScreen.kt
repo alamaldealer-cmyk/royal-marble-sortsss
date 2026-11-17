@@ -1,7 +1,10 @@
 package com.example.ui.screens
 
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -42,10 +46,14 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -67,6 +75,7 @@ import com.example.ui.components.JackpotTowerModal
 import com.example.ui.components.LivesHudPill
 import com.example.ui.components.NavTab
 import com.example.ui.components.OutOfLivesModal
+import com.example.ui.components.ShopAwningBanner
 import com.example.ui.components.UniversalCoinRack
 import com.example.ui.components.bouncyClickTarget
 import com.example.ui.components.bouncyScale
@@ -197,101 +206,145 @@ fun HomeScreen(
                 .padding(bottom = 110.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top Header Bar (Profile icon top-left on Home; Lives & Coins top-right)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (activeTab == NavTab.HOME) {
-                    val profilePress = rememberBouncyPressState(pressedScale = 0.90f)
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .testTag("profile_button")
-                            .bouncyClickTarget(profilePress) {
-                                SoundManager.playTap()
-                                isProfileModalOpen = true
-                            }
-                            .bouncyScale(profilePress)
-                            .shadow(8.dp, RoundedCornerShape(14.dp))
-                            .border(3.dp, Color(0xFFFFD700), RoundedCornerShape(14.dp))
-                            .clip(RoundedCornerShape(14.dp))
-                    ) {
-                        if (currentAvatarBitmap != null) {
-                            Image(
-                                bitmap = currentAvatarBitmap.asImageBitmap(),
-                                contentDescription = playerName,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-                    }
-                } else {
-                    // Left spacer on shop/settings tabs to keep title centered
-                    Spacer(modifier = Modifier.width(95.dp))
-                }
-
-                // Center Title
-                if (activeTab == NavTab.SHOP) {
-                    Text(
-                        text = "SHOP",
-                        fontFamily = FredokaFontFamily,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 30.sp,
-                        color = Color(0xFFFFE600),
-                        letterSpacing = 2.sp
-                    )
-                } else if (activeTab == NavTab.SETTINGS) {
-                    Text(
-                        text = "SETTINGS",
-                        fontFamily = FredokaFontFamily,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 30.sp,
-                        color = Color(0xFFFFE600),
-                        letterSpacing = 2.sp
-                    )
-                }
-
-                // Top-Right Pills (Lives + Coins on Home; Coins on Shop/Settings)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (activeTab == NavTab.HOME) {
-                        LivesHudPill(
-                            lifeSnapshot = lifeSnapshot,
-                            compact = true,
-                            onClick = { showOutOfLivesModal = true }
-                        )
-                    }
-                    UniversalCoinRack(
-                        bitmap = coinRackBitmap,
-                        coins = coins,
-                        compact = true,
-                        showPlusButton = activeTab != NavTab.SHOP,
-                        onPlusClick = if (activeTab != NavTab.SHOP) {
-                            { activeTab = NavTab.SHOP }
-                        } else {
-                            null
-                        }
-                    )
-                }
-            }
-
-            // Divider for Shop / Settings
-            if (activeTab != NavTab.HOME) {
+            if (activeTab == NavTab.SHOP) {
+                val density = LocalDensity.current
+                val strokeWidthPx = with(density) { 4.8.dp.toPx() }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(3.dp)
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(Color(0xFFFFB800), Color(0xFFFFF5A5), Color(0xFFFFB800))
+                        .height(148.dp)
+                ) {
+                    ShopAwningBanner(modifier = Modifier.fillMaxSize())
+
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(start = 12.dp, end = 12.dp, bottom = 26.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Spacer(modifier = Modifier.width(95.dp))
+
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "SHOP",
+                                modifier = Modifier.clearAndSetSemantics {},
+                                fontFamily = FredokaFontFamily,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 30.sp,
+                                color = Color(0xFF4A0614),
+                                letterSpacing = 2.sp,
+                                style = TextStyle(
+                                    drawStyle = Stroke(
+                                        width = strokeWidthPx,
+                                        join = StrokeJoin.Round
+                                    )
+                                )
                             )
+                            Text(
+                                text = "SHOP",
+                                fontFamily = FredokaFontFamily,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 30.sp,
+                                color = Color(0xFFFFE600),
+                                letterSpacing = 2.sp
+                            )
+                        }
+
+                        UniversalCoinRack(
+                            bitmap = coinRackBitmap,
+                            coins = coins,
+                            compact = true,
+                            showPlusButton = false,
+                            onPlusClick = null
                         )
-                )
+                    }
+                }
+            } else {
+                // Top Header Bar (Profile icon top-left on Home; Lives & Coins top-right)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (activeTab == NavTab.HOME) {
+                        val profilePress = rememberBouncyPressState(pressedScale = 0.90f)
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .testTag("profile_button")
+                                .bouncyClickTarget(profilePress) {
+                                    SoundManager.playTap()
+                                    isProfileModalOpen = true
+                                }
+                                .bouncyScale(profilePress)
+                                .shadow(8.dp, RoundedCornerShape(14.dp))
+                                .border(3.dp, Color(0xFFFFD700), RoundedCornerShape(14.dp))
+                                .clip(RoundedCornerShape(14.dp))
+                        ) {
+                            if (currentAvatarBitmap != null) {
+                                Image(
+                                    bitmap = currentAvatarBitmap.asImageBitmap(),
+                                    contentDescription = playerName,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+                    } else {
+                        // Left spacer on settings tab to keep title centered
+                        Spacer(modifier = Modifier.width(95.dp))
+                    }
+
+                    // Center Title
+                    if (activeTab == NavTab.SETTINGS) {
+                        Text(
+                            text = "SETTINGS",
+                            fontFamily = FredokaFontFamily,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 30.sp,
+                            color = Color(0xFFFFE600),
+                            letterSpacing = 2.sp
+                        )
+                    }
+
+                    // Top-Right Pills (Lives + Coins on Home; Coins on Settings)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (activeTab == NavTab.HOME) {
+                            LivesHudPill(
+                                lifeSnapshot = lifeSnapshot,
+                                compact = true,
+                                onClick = { showOutOfLivesModal = true }
+                            )
+                        }
+                        UniversalCoinRack(
+                            bitmap = coinRackBitmap,
+                            coins = coins,
+                            compact = true,
+                            showPlusButton = true,
+                            onPlusClick = { activeTab = NavTab.SHOP }
+                        )
+                    }
+                }
+
+                // Divider for Settings
+                if (activeTab == NavTab.SETTINGS) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(Color(0xFFFFB800), Color(0xFFFFF5A5), Color(0xFFFFB800))
+                                )
+                            )
+                    )
+                }
             }
 
             // Tab Content
@@ -403,7 +456,7 @@ fun HomeScreen(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(SHOP_ITEMS) { item ->
@@ -1219,14 +1272,31 @@ fun InfoModal(type: String, onDismiss: () -> Unit) {
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(12.dp))
+                        val context = LocalContext.current
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color(0xFF001D4A), RoundedCornerShape(12.dp))
-                                .padding(10.dp)
+                                .heightIn(min = 48.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF001D4A))
+                                .clickable {
+                                    SoundManager.playTap()
+                                    val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
+                                        data = Uri.parse("mailto:gamingsoftwareofficial@gmail.com")
+                                        putExtra(Intent.EXTRA_SUBJECT, "Floofies Sort Support")
+                                    }
+                                    try {
+                                        context.startActivity(emailIntent)
+                                    } catch (_: ActivityNotFoundException) {
+                                        // Ignore cleanly if device has no email client installed
+                                    }
+                                }
+                                .testTag("support_email_button")
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "support@royalmarblesort.com",
+                                text = "gamingsoftwareofficial@gmail.com",
                                 color = Color(0xFF8CE4FD),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp,
@@ -1246,7 +1316,7 @@ fun InfoModal(type: String, onDismiss: () -> Unit) {
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "By playing Floofies Marble Sort, you agree to enjoy the puzzle mechanics responsibly. All coins and boosters are in-game virtual items for entertainment purposes.",
+                            text = "By playing Floofies Sort, you agree to enjoy the puzzle mechanics responsibly. All coins and boosters are in-game virtual items for entertainment purposes.",
                             fontFamily = FredokaFontFamily,
                             fontWeight = FontWeight.Medium,
                             fontSize = 12.sp,

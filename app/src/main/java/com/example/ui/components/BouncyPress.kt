@@ -13,6 +13,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
@@ -31,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
@@ -38,10 +40,15 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.game.assets.AssetLoader
@@ -51,9 +58,15 @@ import com.example.ui.theme.FredokaFontFamily
 class BouncyPressState internal constructor(
     val interactionSource: MutableInteractionSource,
     private val scaleAnim: Animatable<Float, *>,
+    private val pressedScale: Float,
     private val onTriggerPulse: () -> Unit
 ) {
     val scale: Float get() = scaleAnim.value
+    val pressProgress: Float
+        get() {
+            val denom = (1f - pressedScale).coerceAtLeast(0.01f)
+            return ((1f - scaleAnim.value) / denom).coerceIn(-0.25f, 1.35f)
+        }
 
     fun triggerPulse() {
         onTriggerPulse()
@@ -73,10 +86,10 @@ fun rememberBouncyPressState(
     LaunchedEffect(isPressed, pulseNonce) {
         if (pulseNonce != lastHandledPulse) {
             lastHandledPulse = pulseNonce
-            if (scaleAnim.value > pressedScale + 0.03f) {
+            if (scaleAnim.value > pressedScale + 0.02f) {
                 scaleAnim.animateTo(
                     targetValue = pressedScale,
-                    animationSpec = tween(durationMillis = 55, easing = FastOutSlowInEasing)
+                    animationSpec = tween(durationMillis = 65, easing = FastOutSlowInEasing)
                 )
             }
             scaleAnim.animateTo(
@@ -102,10 +115,11 @@ fun rememberBouncyPressState(
         }
     }
 
-    return remember(interactionSource, scaleAnim) {
+    return remember(interactionSource, scaleAnim, pressedScale) {
         BouncyPressState(
             interactionSource = interactionSource,
             scaleAnim = scaleAnim,
+            pressedScale = pressedScale,
             onTriggerPulse = { pulseNonce++ }
         )
     }
@@ -140,80 +154,165 @@ fun GreenPlayPillButton(
     contentDescription: String,
     testTag: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    fontSize: TextUnit? = null,
+    widthFraction: Float = 0.64f,
+    letterSpacing: TextUnit = 1.8.sp,
+    strokeWidth: Float = 7f
 ) {
-    val context = LocalContext.current
-    val btnPlayGreenPill = remember {
-        AssetLoader.loadBitmap(context, "profile/btn_play_green_pill.png")
-    }
-    val press = rememberBouncyPressState(pressedScale = 0.88f)
-    val labelSize = when {
+    val labelSize = fontSize ?: when {
         text.contains(":") -> 25.sp
         text.length > 9 -> 28.sp
         else -> 32.sp
     }
 
+    GreenRingPillButtonContent(
+        text = text,
+        contentDescription = contentDescription,
+        testTag = testTag,
+        labelSize = labelSize,
+        letterSpacing = letterSpacing,
+        strokeWidth = strokeWidth,
+        onClick = onClick,
+        modifier = modifier
+            .fillMaxWidth(widthFraction)
+            .widthIn(max = 250.dp)
+            .aspectRatio(778f / 232f)
+    )
+}
+
+@Composable
+fun GreenRingPillButtonContent(
+    text: String,
+    contentDescription: String,
+    testTag: String,
+    labelSize: TextUnit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    letterSpacing: TextUnit = 1.8.sp,
+    strokeWidth: Float = 7f
+) {
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val greenInnerBmp = remember {
+        AssetLoader.loadBitmap(context, "profile/btn_green_pill_inner.png")
+            ?: AssetLoader.loadBitmap(context, "profile/btn_play_green_pill.png")
+    }
+    val goldRingBmp = remember {
+        AssetLoader.loadBitmap(context, "profile/btn_green_pill_ring.png")
+    }
+    val press = rememberBouncyPressState(pressedScale = 0.89f)
+    val pressProgress = press.pressProgress
+    val wholeSinkPx = with(density) { 2.5.dp.toPx() }
+    val innerSinkPx = with(density) { 1.4.dp.toPx() }
+
     Box(
         modifier = modifier
-            .fillMaxWidth(0.64f)
-            .widthIn(max = 250.dp)
-            .aspectRatio(640f / 200f)
             .testTag(testTag)
+            .semantics { this.contentDescription = contentDescription }
             .bouncyClickTarget(press, role = Role.Button, onClick = onClick)
-            .bouncyScale(press),
+            .graphicsLayer {
+                val outerScale = 1f - 0.075f * pressProgress
+                scaleX = outerScale
+                scaleY = outerScale
+                translationY = wholeSinkPx * pressProgress
+            },
         contentAlignment = Alignment.Center
     ) {
-        if (btnPlayGreenPill != null) {
-            Image(
-                bitmap = btnPlayGreenPill.asImageBitmap(),
-                contentDescription = contentDescription,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.FillBounds
-            )
+        // 1. Inner Glossy Green Pill + Label Text tucked snugly behind the golden ring (zero gap)
+        val innerModifier = if (goldRingBmp != null) {
+            Modifier
+                .fillMaxWidth(0.955f)
+                .fillMaxHeight(0.845f)
+                .clip(RoundedCornerShape(percent = 38))
         } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(40.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color(0xFF4ADE80), Color(0xFF22C55E), Color(0xFF15803D))
+            Modifier.fillMaxSize()
+        }
+
+        Box(
+            modifier = innerModifier
+                .graphicsLayer {
+                    scaleY = 1f - 0.045f * pressProgress
+                    translationY = innerSinkPx * pressProgress
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            if (greenInnerBmp != null) {
+                Image(
+                    bitmap = greenInnerBmp.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.FillBounds,
+                    filterQuality = FilterQuality.High
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(40.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color(0xFF4ADE80), Color(0xFF22C55E), Color(0xFF15803D))
+                            )
+                        )
+                        .border(3.dp, Color(0xFFFFD700), RoundedCornerShape(40.dp))
+                )
+            }
+
+            // Physical press darkening overlay on the green pill
+            val shadeAlpha = (0.18f * pressProgress).coerceIn(0f, 0.24f)
+            if (shadeAlpha > 0.005f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = shadeAlpha))
+                )
+            }
+
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    text = text,
+                    modifier = Modifier.clearAndSetSemantics {},
+                    maxLines = 1,
+                    style = TextStyle(
+                        fontFamily = FredokaFontFamily,
+                        fontWeight = FontWeight.Black,
+                        fontSize = labelSize,
+                        color = Color(0xFF034400),
+                        letterSpacing = letterSpacing,
+                        drawStyle = Stroke(
+                            width = strokeWidth,
+                            join = StrokeJoin.Round
+                        ),
+                        shadow = Shadow(
+                            color = Color(0xAA012800),
+                            offset = Offset(0f, 3f),
+                            blurRadius = 4f
                         )
                     )
-                    .border(3.dp, Color(0xFFFFD700), RoundedCornerShape(40.dp))
-            )
-        }
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = text,
-                maxLines = 1,
-                style = TextStyle(
-                    fontFamily = FredokaFontFamily,
-                    fontWeight = FontWeight.Black,
-                    fontSize = labelSize,
-                    color = Color(0xFF034400),
-                    letterSpacing = 1.8.sp,
-                    drawStyle = Stroke(
-                        width = 7f,
-                        join = StrokeJoin.Round
-                    ),
-                    shadow = Shadow(
-                        color = Color(0xAA012800),
-                        offset = Offset(0f, 3f),
-                        blurRadius = 4f
+                )
+                Text(
+                    text = text,
+                    maxLines = 1,
+                    style = TextStyle(
+                        fontFamily = FredokaFontFamily,
+                        fontWeight = FontWeight.Black,
+                        fontSize = labelSize,
+                        color = Color.White,
+                        letterSpacing = letterSpacing
                     )
                 )
-            )
-            Text(
-                text = text,
-                maxLines = 1,
-                style = TextStyle(
-                    fontFamily = FredokaFontFamily,
-                    fontWeight = FontWeight.Black,
-                    fontSize = labelSize,
-                    color = Color.White,
-                    letterSpacing = 1.8.sp
-                )
+            }
+        }
+
+        // 2. Outer Golden Ring Frame drawn ON TOP so it hugs the green button seamlessly as one piece
+        if (goldRingBmp != null) {
+            Image(
+                bitmap = goldRingBmp.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.FillBounds,
+                filterQuality = FilterQuality.High
             )
         }
     }

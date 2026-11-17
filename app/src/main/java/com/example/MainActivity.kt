@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -50,7 +51,7 @@ import kotlinx.coroutines.delay
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+        enableEdgeToEdge()
         val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
         windowInsetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -129,6 +130,16 @@ fun RoyalMarblesApp() {
 
     fun loseOneLife() {
         val updated = LivesManager.consumeOneLife(
+            lives = lifeSnapshot.lives,
+            nextRefillAtMs = lifeSnapshot.nextRefillAtMs,
+            nowMs = System.currentTimeMillis()
+        )
+        lifeSnapshot = updated
+        LivesManager.save(prefs, updated)
+    }
+
+    fun gainOneAdLife() {
+        val updated = LivesManager.addOneLife(
             lives = lifeSnapshot.lives,
             nextRefillAtMs = lifeSnapshot.nextRefillAtMs,
             nowMs = System.currentTimeMillis()
@@ -306,13 +317,6 @@ fun RoyalMarblesApp() {
                 }
 
                 "playing" -> {
-                    BackHandler {
-                        if (!activeLevelWon) {
-                            loseOneLife()
-                        }
-                        currentView = "home"
-                    }
-
                     key(currentLevel) {
                         GameBoardScreen(
                             levelNumber = currentLevel,
@@ -320,6 +324,14 @@ fun RoyalMarblesApp() {
                             lifeSnapshot = lifeSnapshot,
                             onReturnHome = { currentView = "home" },
                             onLoseLife = { loseOneLife() },
+                            onGainOneLife = { gainOneAdLife() },
+                            onWatchAdForLife = { gainAdLives() },
+                            onRefillLivesWithCoins = {
+                                if (coins >= LivesManager.REFILL_COIN_COST) {
+                                    saveCoins(coins - LivesManager.REFILL_COIN_COST)
+                                    refillAllLives()
+                                }
+                            },
                             onLevelWon = { activeLevelWon = true },
                             onAddCoins = { amount -> saveCoins(coins + amount) },
                             onLevelAdvanced = { nextLvl ->

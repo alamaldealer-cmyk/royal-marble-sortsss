@@ -9,6 +9,7 @@ import android.graphics.RadialGradient
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -85,6 +86,10 @@ import com.example.game.sound.SoundManager
 import com.example.ui.components.CLEAN_UP_COIN_COST
 import com.example.ui.components.ChainFullCleanUpOverlay
 import com.example.ui.components.LevelCompleteModal
+import com.example.ui.components.LevelFailedModal
+import com.example.ui.components.LoseLifeWarningModal
+import com.example.ui.components.LoseLifeWarningMode
+import com.example.ui.components.OutOfLivesModal
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
@@ -98,6 +103,9 @@ fun GameBoardScreen(
     lifeSnapshot: LifeSnapshot = LifeSnapshot(LivesManager.MAX_LIVES, 0L, 0L),
     onReturnHome: () -> Unit,
     onLoseLife: () -> Unit = {},
+    onGainOneLife: () -> Unit = {},
+    onWatchAdForLife: () -> Unit = {},
+    onRefillLivesWithCoins: () -> Unit = {},
     onLevelWon: () -> Unit = {},
     onAddCoins: (Int) -> Unit,
     onLevelAdvanced: (Int) -> Unit
@@ -154,8 +162,13 @@ fun GameBoardScreen(
     key(currentLevel, levelResetNonce) {
         var score by remember { mutableIntStateOf(0) }
         var currentCoins by remember(coins) { mutableIntStateOf(coins) }
+        var effectiveLifeSnapshot by remember(lifeSnapshot) { mutableStateOf(lifeSnapshot) }
         var gameState by remember { mutableStateOf("playing") }
         var isPaused by remember { mutableStateOf(false) }
+        var loseLifeWarningMode by remember { mutableStateOf<LoseLifeWarningMode?>(null) }
+        var showLevelFailedModal by remember { mutableStateOf(false) }
+        var levelFailedBeforeLives by remember { mutableIntStateOf(effectiveLifeSnapshot.lives) }
+        var showTryAgainOutOfLivesModal by remember { mutableStateOf(false) }
         var soundMuted by remember { mutableStateOf(!SoundManager.enabled) }
 
         var magnetCount by remember { mutableIntStateOf(3) }
@@ -3263,7 +3276,7 @@ fun GameBoardScreen(
         }
 
         // Chain Full / Stuck Clean Up Overlay (sits under Top HUD so Pause & Coin Rack stay bright & clickable)
-        if (gameState == "chain_stuck") {
+        if (gameState == "chain_stuck" && loseLifeWarningMode == null && !showLevelFailedModal) {
             val highlightedBalls = beltBalls.filter { cleanUpHighlightedIds.contains(it.id) }
             ChainFullCleanUpOverlay(
                 coins = currentCoins,
@@ -3287,14 +3300,22 @@ fun GameBoardScreen(
                     }
                 },
                 onQuit = {
-                    chainStuckTimer = 0f
-                    cleanUpHighlightedIds = emptySet()
-                    if (gameState != "won") {
-                        onLoseLife()
-                    }
-                    onReturnHome()
+                    loseLifeWarningMode = LoseLifeWarningMode.OUT_OF_SPACE
                 }
             )
+        }
+
+        // Handle hardware/gesture Back press during gameplay or overlays
+        BackHandler(
+            enabled = loseLifeWarningMode == null && !showLevelFailedModal && !showTryAgainOutOfLivesModal
+        ) {
+            SoundManager.playTap()
+            when {
+                isPaused -> isPaused = false
+                gameState == "won" -> onReturnHome()
+                gameState == "chain_stuck" -> loseLifeWarningMode = LoseLifeWarningMode.OUT_OF_SPACE
+                else -> loseLifeWarningMode = LoseLifeWarningMode.LEAVE_LEVEL
+            }
         }
 
         // Top Header Bar (matches HomeScreen and original game: Pause left, Lives + Coins right)
@@ -3330,7 +3351,7 @@ fun GameBoardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 LivesHudPill(
-                    lifeSnapshot = lifeSnapshot,
+                    lifeSnapshot = effectiveLifeSnapshot,
                     compact = true
                 )
                 UniversalCoinRack(
@@ -3364,11 +3385,108 @@ fun GameBoardScreen(
                 onHome = {
                     SoundManager.playTap()
                     isPaused = false
-                    if (gameState != "won") {
-                        onLoseLife()
+                    if (gameState == "won") {
+                        onReturnHome()
+                    } else {
+                        loseLifeWarningMode = LoseLifeWarningMode.LEAVE_LEVEL
                     }
+                }
+            )
+        }
+
+        // Lose-Life Warning Modal ("You will lose a life!" - Reference 1)
+        loseLifeWarningMode?.let { warningMode ->
+            LoseLifeWarningModal(
+                mode = warningMode,
+                coins = currentCoins,
+                onWatchAdPlayOn = {
+                    loseLifeWarningMode = null
+                    executeCleanUp()
+                },
+                onCoinsPlayOn = {
+                    if (currentCoins >= CLEAN_UP_COIN_COST) {
+                        currentCoins -= CLEAN_UP_COIN_COST
+                        onAddCoins(-CLEAN_UP_COIN_COST)
+                        loseLifeWarningMode = null
+                        executeCleanUp()
+                    }
+                },
+                onKeepPlaying = {
+                    loseLifeWarningMode = null
+                },
+                onConfirmLoseLife = {
+                    val before = effectiveLifeSnapshot.lives
+                    levelFailedBeforeLives = before
+                    effectiveLifeSnapshot = LivesManager.consumeOneLife(
+                        lives = effectiveLifeSnapshot.lives,
+                        nextRefillAtMs = effectiveLifeSnapshot.nextRefillAtMs,
+                        nowMs = System.currentTimeMillis()
+                    )
+                    onLoseLife()
+                    loseLifeWarningMode = null
+                    showLevelFailedModal = true
+                }
+            )
+        }
+
+        // Level Failed Modal (5 Hearts Life Drop + "+1" Watch Ad + "Try Again" - Reference 2)
+        if (showLevelFailedModal) {
+            LevelFailedModal(
+                levelNumber = currentLevel,
+                beforeLives = levelFailedBeforeLives,
+                lifeSnapshot = effectiveLifeSnapshot,
+                onWatchAdPlusOneLife = {
+                    effectiveLifeSnapshot = LivesManager.addOneLife(
+                        lives = effectiveLifeSnapshot.lives,
+                        nextRefillAtMs = effectiveLifeSnapshot.nextRefillAtMs,
+                        nowMs = System.currentTimeMillis()
+                    )
+                    onGainOneLife()
+                },
+                onTryAgain = {
+                    if (effectiveLifeSnapshot.lives > 0) {
+                        showLevelFailedModal = false
+                        isPaused = false
+                        isTutorialDismissed = false
+                        isMagnetActive = false
+                        isShuffling = false
+                        isCannonActive = false
+                        gameState = "playing"
+                        levelResetNonce++
+                    } else {
+                        showTryAgainOutOfLivesModal = true
+                    }
+                },
+                onCloseToHome = {
+                    showLevelFailedModal = false
                     onReturnHome()
                 }
+            )
+        }
+
+        if (showTryAgainOutOfLivesModal) {
+            OutOfLivesModal(
+                lifeSnapshot = effectiveLifeSnapshot,
+                coins = currentCoins,
+                onWatchAdForLife = {
+                    effectiveLifeSnapshot = LivesManager.addLives(
+                        lives = effectiveLifeSnapshot.lives,
+                        nextRefillAtMs = effectiveLifeSnapshot.nextRefillAtMs,
+                        nowMs = System.currentTimeMillis(),
+                        count = LivesManager.AD_REWARD_LIVES
+                    )
+                    onWatchAdForLife()
+                    showTryAgainOutOfLivesModal = false
+                },
+                onCoinsRefillAll = {
+                    if (currentCoins >= LivesManager.REFILL_COIN_COST) {
+                        currentCoins -= LivesManager.REFILL_COIN_COST
+                        effectiveLifeSnapshot = LivesManager.refillAllLives()
+                        onRefillLivesWithCoins()
+                    }
+                    showTryAgainOutOfLivesModal = false
+                },
+                onDismiss = { showTryAgainOutOfLivesModal = false }
             )
         }
 

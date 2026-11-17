@@ -105,7 +105,7 @@ fun HomeCoinEventButton(
 
     BoxWithConstraints(
         modifier = modifier
-            .width(96.dp)
+            .width(76.dp)
             .aspectRatio(284f / 250f)
             .minimumInteractiveComponentSize()
             .semantics {

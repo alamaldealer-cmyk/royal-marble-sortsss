@@ -93,6 +93,8 @@ object AssetLoader {
             "nav/nav_settings.png",
             "profile/btn_level_green.png",
             "profile/btn_play_green_pill.png",
+            "profile/btn_green_pill_inner.png",
+            "profile/btn_green_pill_ring.png",
             "crates/crate_mystery.png",
             "cave/dispenser_0.png",
             "cave/dispenser_1.png",
